@@ -1,9 +1,11 @@
-import csv, operator, multiprocessing, os
+import csv, operator, os
 
+import multiprocessing
 from datetime import datetime
 from itertools import combinations
 from vector import vector
 from sys import stdout
+from cruncher import Workforce
 
 #from numba import jit
 
@@ -111,55 +113,7 @@ class Game():
                 return 6
             return None
 
-class Cruncher(multiprocessing.Process):
-    def __init__(self, workerCount, poolSize, blockSize, games, jobQ, resultQ, divisionWeights = None):
-        super(Cruncher,self).__init__()
-        self.poolSize = poolSize
-        self.blockSize = blockSize
-        self.games = games
-        self.jobQ = jobQ
-        self.resultQ = resultQ
-        self.bestWeight = 0
-        self.workerCount = workerCount
-        if divisionWeights is None:
-            self.weights = vector([95000, 750, 100, 3, 2, 1])
-        else:
-            self.weights = vector(divisionWeights)
-    
-    #@jit(nonpython=true)
-    def run(self):
-        print('Cruncher {} starting with divisional weights {}'.format(self.workerCount, self.weights))
-        while True:
-            c = 0
-            t = datetime.now()
-            prefix = self.jobQ.get()
-            if prefix is None:
-                return None
-            #self.resultQ.put(Message('M', self.workerCount, 'Starting block {}'.format(prefix)))
-            for i in combinations(range(max(list(prefix))+1,self.poolSize+1),self.blockSize):
-                r = {}
-                r['Numbers'] = prefix + i
-                r['Divisions'] = vector(6)
-                r['Process'] = self.workerCount
-                for g in self.games:
-                    d = g.play(r['Numbers'])
-                    c += 1
-                    if d is not None:
-                         r['Divisions'][d-1] += 1
-                r['Weight'] = sum(r['Divisions'] * self.weights)
-                if r['Weight'] > self.bestWeight:
-                    self.bestWeight = r['Weight']
-                    self.resultQ.put(Message('R', self.workerCount,r))
-            e = datetime.now() - t
-            s = e.seconds + (e.microseconds / 1000000)
-            if s  > 0:
-                self.resultQ.put(Message('M',self.workerCount, 'Completed {:10,.0f} combinations in {:8,.4f} seconds. {:7,.0f} combinations per second. Block {}'.format(c, s, c/s, prefix)))
                 
-class Message():
-    def __init__(self, type, id, message):
-        self.type = type
-        self.id = id
-        self.message = message
 
 class Procs():
     def __init__(self, id):
@@ -182,12 +136,12 @@ class Results():
         if block is not None:
             self.block = block
         if weights is not None:
-            self.divistionWeights = vector(weights)
+            self.divisionWeights = vector(weights)
         print('Division weights {}'.format(self.divisionWeights))
-        print('Division argument {}'.format(weights))
         workQ = multiprocessing.Queue()
         resultQ = multiprocessing.Queue()
         
+        wf = Workforce(workQ, resultQ, self.field, self.block, self.games, self.divisionWeights)
 
         for i in combinations(range(1,self.field - self.block + 1),self.pick - self.block):
             workQ.put(i)
@@ -195,15 +149,16 @@ class Results():
             workQ.put(None)
         print('Added {:15,.0f} work blocks to the work que'.format(workQ.qsize()))
 
-        crunchers = []
+        #crunchers = []
         procs = []
         for i in range(multiprocessing.cpu_count()):
-            crunchers.append(Cruncher(i, self.field, self.block, self.games, workQ, resultQ, self.divisionWeights))
-            crunchers[i].daemon = True
-            crunchers[i].start()
+            #crunchers.append(Cruncher(i, self.field, self.block, self.games, workQ, resultQ, self.divisionWeights))
+            #crunchers[i].daemon = True
+            #crunchers[i].start()
             procs.append(Procs(i))
             
-        print("{} crunchers started.".format(multiprocessing.cpu_count()))
+        #print("{} crunchers started.".format(multiprocessing.cpu_count()))
+        w = Workforce(workQ, resultQ, self.field, self.block, self.games, self.divisionWeights)
         
         while not workQ.empty():
             m = resultQ.get()
@@ -211,16 +166,16 @@ class Results():
                 procs[m.id].lastMessage = m.message
                 print('{}. {:9,.0f} blocks left'.format(m.message, workQ.qsize()))
             if m.type == 'R':
-                procs[m.id].lastResult = m.message
-                if procs[m.id].lastResult['Weight'] > procs[m.id].bestResult['Weight']:
-                    procs[m.id].bestResult = procs[m.id].lastResult.copy()
-                    #print('Numbers = {}, Divisions = {}, Weight = {}'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
-                    with open('Results.txt','a') as f:
-                        f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
+                #procs[m.id].lastResult = m.message
+                #if procs[m.id].lastResult['Weight'] > procs[m.id].bestResult['Weight']:
+                    #procs[m.id].bestResult = procs[m.id].lastResult.copy()
+                #print('Numbers = {}, Divisions = {}, Weight = {}'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
+                with open('Results.txt','a') as f:
+                    f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
             #updateScreen(procs,workQ.qsize())
                 
-        for i in range(multiprocessing.cpu_count()):
-            crunchers[i].join()
+        #for i in range(multiprocessing.cpu_count()):
+        #    crunchers[i].join()
 
 def prep():
     games = []
@@ -277,7 +232,7 @@ def printxy(x, y, text):
 def go():
     g = prep()
     r = Results(g)
-    r.compute(10,4,vector([0,750,100,3,2,1]))
+    r.compute(6,4,vector([95000,750,100,3,2,1]))
 
 if __name__ == '__main__':
     go()
