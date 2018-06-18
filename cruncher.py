@@ -23,6 +23,7 @@ class PipeWatcher(Thread):
 
     def run(self):
         self.__running = True
+        #print('Pipe pid {}'.format(self.id))
         while self.__running:
             try:
                 while self.__pipe.poll(None):  # Block indefinately waiting for a message

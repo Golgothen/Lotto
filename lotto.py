@@ -141,8 +141,6 @@ class Results():
         workQ = multiprocessing.Queue()
         resultQ = multiprocessing.Queue()
         
-        wf = Workforce(workQ, resultQ, self.field, self.block, self.games, self.divisionWeights)
-
         for i in combinations(range(1,self.field - self.block + 1),self.pick - self.block):
             workQ.put(i)
         for i in range(multiprocessing.cpu_count()):
