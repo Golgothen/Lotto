@@ -102,7 +102,7 @@ class Cruncher(multiprocessing.Process):
                     d = g.play(r['Numbers'])
                     c += 1
                     if d is not None:
-                         r['Divisions'][d-1] += 1
+                        r['Divisions'][d-1] += 1
                 r['Weight'] = sum(r['Divisions'] * self.weights)
                 if r['Weight'] > self.bestWeight:
                     self.bestWeight = r['Weight']
