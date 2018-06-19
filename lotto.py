@@ -113,7 +113,6 @@ class Results():
             self.block = block
         workQ = multiprocessing.Queue()
         resultQ = multiprocessing.Queue()
-        
 
         for i in combinations(range(1,self.games.poolSize - self.block + 1),self.pick - self.block):
             workQ.put(i)

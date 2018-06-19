@@ -23,6 +23,7 @@ class PipeWatcher(Thread):
 
     def run(self):
         self.__running = True
+        #print('Pipe pid {}'.format(self.id))
         while self.__running:
             try:
                 while self.__pipe.poll(None):  # Block indefinately waiting for a message
@@ -95,7 +96,6 @@ class Cruncher(multiprocessing.Process):
                 r['Divisions'], r['Weight'] = self.game.play(r['Numbers'])
                 c+=self.game.len
                 r['Process'] = self.workerCount
-                #print(r['Weight'])
                 if r['Weight'] > self.bestWeight:
                     self.bestWeight = r['Weight']
                     self.pipe.send((self.workerCount,self.bestWeight))
