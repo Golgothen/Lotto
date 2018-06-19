@@ -46,14 +46,14 @@ class PipeWatcher(Thread):
 
 
 class Workforce():
-    def __init__(self, inQ, outQ, poolSize, blockSize, games, divisionWeights = None):
+    def __init__(self, inQ, outQ, blockSize, game):
 
         self.workers = []
         self.pipes = []
         for i in range(multiprocessing.cpu_count()):
             r, s = multiprocessing.Pipe()
             self.pipes.append(PipeWatcher(self, r, 'Hub{}'.format(i)))
-            self.workers.append(Cruncher(i, poolSize, blockSize, games, inQ, outQ, s, divisionWeights))
+            self.workers.append(Cruncher(i, blockSize, game, inQ, outQ, s))
             self.pipes[i].start()
             self.workers[i].start()
             
@@ -66,26 +66,21 @@ class Workforce():
         
 
 class Cruncher(multiprocessing.Process):
-    def __init__(self, workerCount, poolSize, blockSize, games, jobQ, resultQ, p, divisionWeights = None):
+    def __init__(self, workerCount, blockSize, game, jobQ, resultQ, p):
         super(Cruncher,self).__init__()
-        self.poolSize = poolSize
         self.blockSize = blockSize
-        self.games = games
+        self.game = game
         self.jobQ = jobQ
         self.resultQ = resultQ
         self.bestWeight = 0
         self.workerCount = workerCount
         self.pipe = p
-        self.weights = vector([95000, 750, 100, 3, 2, 1])
-        if divisionWeights is not None:
-            self.weights = vector(divisionWeights)
     
     def run(self):
         pw = PipeWatcher(self, self.pipe, 'Pipe{}'.format(self.workerCount))
         pw.start()
         p = psutil.Process()
         p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
-        print('Cruncher {} starting with divisional weights {}'.format(self.workerCount, self.weights))
         while True:
             c = 0
             t = datetime.now()
@@ -93,18 +88,13 @@ class Cruncher(multiprocessing.Process):
             if prefix is None:
                 return None
             #self.resultQ.put(Message('M', self.workerCount, 'Starting block {}'.format(prefix)))
-            for i in combinations(range(max(list(prefix))+1,self.poolSize+1),self.blockSize):
+            for i in combinations(range(max(list(prefix))+1,self.game.poolSize+1),self.blockSize):
                 r = {}
                 r['Numbers'] = set(prefix + i)
                 #print(r['Numbers'])
-                r['Divisions'] = vector(6)
+                r['Divisions'], r['Weight'] = self.game.play(r['Numbers'])
+                c+=self.game.len
                 r['Process'] = self.workerCount
-                for g in self.games:
-                    d = g.play(r['Numbers'])
-                    c += 1
-                    if d is not None:
-                         r['Divisions'][d-1] += 1
-                r['Weight'] = sum(r['Divisions'] * self.weights)
                 #print(r['Weight'])
                 if r['Weight'] > self.bestWeight:
                     self.bestWeight = r['Weight']

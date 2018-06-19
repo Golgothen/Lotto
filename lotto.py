@@ -6,7 +6,7 @@ from itertools import combinations
 from vector import vector
 from sys import stdout
 from cruncher import Workforce
-from game import Game
+from game import *
 
 #from numba import jit
 
@@ -93,32 +93,35 @@ class Procs():
         self.bestResult = {'Numbers' : vector(7), 'Divisions' : vector(6), 'Weight' : 0}
         
 class Results():
-    def __init__(self, games):
+    def __init__(self, games, outfile = None):
         self.games = games
-        self.field = 45
         self.block = 4
-        self.pick = 7
+        self.pick = self.games.minPick
         self.divisionWeights = vector([95000, 750, 100, 3, 2, 1])
+        if outfile is None:
+            self.outfile = "Results"
+        else:
+            self.outfile = outfile
     
-    def compute(self, picks = None, block = None, weights = None):
+    def compute(self, picks = None, block = None):
         if picks is not None:
-            self.pick = picks
+            if picks < self.games.minPick:
+                self.pick = self.games.minPicks
+            else:
+                self.pick = picks
         if block is not None:
             self.block = block
-        if weights is not None:
-            self.divisionWeights = vector(weights)
-        print('Division weights {}'.format(self.divisionWeights))
         workQ = multiprocessing.Queue()
         resultQ = multiprocessing.Queue()
         
 
-        for i in combinations(range(1,self.field - self.block + 1),self.pick - self.block):
+        for i in combinations(range(1,self.games.poolSize - self.block + 1),self.pick - self.block):
             workQ.put(i)
         for i in range(multiprocessing.cpu_count()):
             workQ.put(None)
         print('Added {:15,.0f} work blocks to the work que'.format(workQ.qsize()))
 
-        wf = Workforce(workQ, resultQ, self.field, self.block, self.games, self.divisionWeights)
+        wf = Workforce(workQ, resultQ, self.block, self.games)
         #procs = []
         #for i in range(multiprocessing.cpu_count()):
         #    procs.append(Procs(i))
@@ -133,7 +136,7 @@ class Results():
                 #if procs[m.id].lastResult['Weight'] > procs[m.id].bestResult['Weight']:
                 #    procs[m.id].bestResult = procs[m.id].lastResult.copy()
                 #print('Numbers = {}, Divisions = {}, Weight = {}'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
-                with open('Results.txt','a') as f:
+                with open('{} - {}.txt'.format(self.outfile, self.pick),'a') as f:
                     f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
             #updateScreen(procs,workQ.qsize())
                 
@@ -141,16 +144,10 @@ class Results():
         #    crunchers[i].join()
 
 def prep():
-    games = []
-    
-    with open("lotto.csv") as f:
-        reader = csv.reader(f)
-        headings = next(reader)
-        
-        for row in reader:
-            if row[0] in ['SAT']:  # + ['WED','MON']
-                games.append(Game(row))
-    return games
+    game = OzLotto()
+    game.load("ozlotto.csv")
+    #game.divisionWeights = vector([1,1,1,1,1,1])
+    return game
 
 def paintScreen(procs):
     os.system('cls')
@@ -194,8 +191,8 @@ def printxy(x, y, text):
 
 def go():
     g = prep()
-    r = Results(g)
-    r.compute(6,4,vector([95000,750,100,3,2,1]))
+    r = Results(g, "OzLotto")
+    r.compute(7,4)
 
 if __name__ == '__main__':
     go()
