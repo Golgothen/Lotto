@@ -6,6 +6,7 @@ from itertools import combinations
 from vector import vector
 from sys import stdout
 from cruncher import Workforce
+from game import Game
 
 #from numba import jit
 
@@ -81,37 +82,6 @@ class Field():
         for b in self.balls.values():
             b.draw(game)
 
-class Game():
-    def __init__(self, data):
-        self.day = data[0]
-        self.drawDate = datetime.strptime(data[1],"%d/%m/%Y")
-        self.numbers = [int(i) for i in data[2:8]]
-        self.sups = [int(i) for i in data[8:10]]
-    
-    #@jit(nonpython=true)
-    def play(self, numbers):
-        drawcount = 0
-        supcount = 0
-        if len(self.numbers) == 6 and len(self.sups) == 2 and len(numbers) > 5:
-            for n in numbers:
-                if n in self.numbers:
-                    drawcount += 1
-                if n in self.sups:
-                    supcount += 1
-                    #print('Draw count: {}, Sup Count: {}'.format(drawcount,supcount))
-            if drawcount == 6:
-                return 1
-            if drawcount == 5:
-                if supcount > 0:
-                    return 2
-                return 3
-            if drawcount == 4:
-                return 4
-            if drawcount == 3 and supcount > 0:
-                return 5
-            if drawcount > 0 and supcount == 2:
-                return 6
-            return None
 
                 
 
@@ -141,7 +111,6 @@ class Results():
         workQ = multiprocessing.Queue()
         resultQ = multiprocessing.Queue()
         
-        wf = Workforce(workQ, resultQ, self.field, self.block, self.games, self.divisionWeights)
 
         for i in combinations(range(1,self.field - self.block + 1),self.pick - self.block):
             workQ.put(i)
@@ -149,26 +118,20 @@ class Results():
             workQ.put(None)
         print('Added {:15,.0f} work blocks to the work que'.format(workQ.qsize()))
 
-        #crunchers = []
-        procs = []
-        for i in range(multiprocessing.cpu_count()):
-            #crunchers.append(Cruncher(i, self.field, self.block, self.games, workQ, resultQ, self.divisionWeights))
-            #crunchers[i].daemon = True
-            #crunchers[i].start()
-            procs.append(Procs(i))
+        wf = Workforce(workQ, resultQ, self.field, self.block, self.games, self.divisionWeights)
+        #procs = []
+        #for i in range(multiprocessing.cpu_count()):
+        #    procs.append(Procs(i))
             
-        #print("{} crunchers started.".format(multiprocessing.cpu_count()))
-        w = Workforce(workQ, resultQ, self.field, self.block, self.games, self.divisionWeights)
-        
         while not workQ.empty():
             m = resultQ.get()
             if m.type == 'M':
-                procs[m.id].lastMessage = m.message
+                #procs[m.id].lastMessage = m.message
                 print('{}. {:9,.0f} blocks left'.format(m.message, workQ.qsize()))
             if m.type == 'R':
                 #procs[m.id].lastResult = m.message
                 #if procs[m.id].lastResult['Weight'] > procs[m.id].bestResult['Weight']:
-                    #procs[m.id].bestResult = procs[m.id].lastResult.copy()
+                #    procs[m.id].bestResult = procs[m.id].lastResult.copy()
                 #print('Numbers = {}, Divisions = {}, Weight = {}'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
                 with open('Results.txt','a') as f:
                     f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))

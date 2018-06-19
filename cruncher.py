@@ -95,7 +95,8 @@ class Cruncher(multiprocessing.Process):
             #self.resultQ.put(Message('M', self.workerCount, 'Starting block {}'.format(prefix)))
             for i in combinations(range(max(list(prefix))+1,self.poolSize+1),self.blockSize):
                 r = {}
-                r['Numbers'] = prefix + i
+                r['Numbers'] = set(prefix + i)
+                #print(r['Numbers'])
                 r['Divisions'] = vector(6)
                 r['Process'] = self.workerCount
                 for g in self.games:
@@ -104,10 +105,12 @@ class Cruncher(multiprocessing.Process):
                     if d is not None:
                          r['Divisions'][d-1] += 1
                 r['Weight'] = sum(r['Divisions'] * self.weights)
+                #print(r['Weight'])
                 if r['Weight'] > self.bestWeight:
                     self.bestWeight = r['Weight']
                     self.pipe.send((self.workerCount,self.bestWeight))
                     self.resultQ.put(Message('R', self.workerCount,r))
+                    #print(self.resultQ.qsize())
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
             if s  > 0:
