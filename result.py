@@ -17,9 +17,12 @@ class Results():
     def compute(self, picks = None, block = None):
         if picks is not None:
             if picks < self.games.minPick:
-                self.pick = self.games.minPicks
+                self.pick = self.games.minPick
             else:
                 self.pick = picks
+        else:
+            self.pick = self.games.minPicks
+            
         if block is not None:
             self.block = block
         workQ = Queue()
@@ -49,7 +52,7 @@ class Results():
                 #if procs[m.id].lastResult['Weight'] > procs[m.id].bestResult['Weight']:
                 #    procs[m.id].bestResult = procs[m.id].lastResult.copy()
                 #print('Numbers = {}, Divisions = {}, Weight = {}'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
-                with open('{} - {}.txt'.format(self.outfile, self.pick),'a') as f:
+                with open('{}-{}.txt'.format(self.outfile, self.pick),'a') as f:
                     f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
             #updateScreen(procs,workQ.qsize())
                 

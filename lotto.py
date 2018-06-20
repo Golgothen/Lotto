@@ -1,15 +1,6 @@
-#import csv, operator, os
-
-#import multiprocessing
-#from datetime import datetime
-#from itertools import combinations
-#from vector import vector
-#from sys import stdout
-#from cruncher import Workforce
 from game import *
 from result import Results
-
-#from numba import jit
+import argparse
 
 
 class Procs():
@@ -20,17 +11,33 @@ class Procs():
         self.bestResult = {'Numbers' : vector(7), 'Divisions' : vector(6), 'Weight' : 0}
         
 if __name__ == '__main__':
-    game = OzLotto()
-    game.load("ozlotto.csv")
-    #game.divisionWeights = vector([1,1,1,1,1,1])
-    r = Results(game, "OzLotto")
-    r.compute(7,4)
     
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--game', nargs = 1, default = ['lotto'], help = ' REQUIRED: Games currently supported = Lotto and OzLotto. Default is Lotto')
+    ap.add_argument('--file', nargs = 1, default = ['.csv'], help = ' REQUIRED: CSV File to load for game comparison. Default is <game>.csv')
+    ap.add_argument('--day', nargs = '+', default = ['SAT'], help = 'Applies to Lotto games only.  Select which days to include out of MON, WED, SAT. Default is SAT only. Seperate arguments with commas.')
+    ap.add_argument('--pick', nargs = 1, type= int, default = [0], help = 'Size of ticket to test. Default is the game minimum (6 for Lotto, 7 for OsLotto)')
+    ap.add_argument('--block', nargs = 1, type= int, default = [4], help = 'Size of the combination block.  Default is 4 (minimum).  Larger blocks have exponentially more combinations')
+    
+    args = ap.parse_args()
+    
+    print(args)
+    
+    if args.game[0].lower() == 'lotto':
+        game = Lotto()
+    if args.game[0].lower() == 'ozlotto':
+        game = OzLotto()
 
-
-
-
-
+    if args.file[0] == '.csv':
+        args.file[0] = args.game[0] + args.file[0]
+    
+    game.load(args.file[0])
+    #game.divisionWeights = vector([1,1,1,1,1,1])
+    r = Results(game, args.game[0])
+    if args.block[0] < 4:
+        args.block[0] = 4
+    r.compute(args.pick[0],args.block[0])
+    
 def paintScreen(procs):
     os.system('cls')
     stdout.write('-- ID --:' + ('-' * 90) + '\n')
