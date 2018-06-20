@@ -107,7 +107,7 @@ class Cruncher(multiprocessing.Process):
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
             if s  > 0:
-                self.resultQ.put(Message('M',self.workerCount, 'Completed {:10,.0f} combinations in {:8,.4f} seconds. {:7,.0f} combinations per second. Block {}'.format(c, s, c/s, prefix)))
+                self.resultQ.put(Message('M',self.workerCount, 'Completed {:15,.0f} combinations in {:7,.2f} seconds. {:8,.0f} combinations per second. Block {}'.format(c, s, c/s, prefix)))
     
     def updateBest(self, weight):
         #print('Process {} received weight of {}'.format(self.workerCount, weight))
