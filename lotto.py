@@ -1,11 +1,11 @@
-import csv, operator, os
+#import csv, operator, os
 
-import multiprocessing
-from datetime import datetime
-from itertools import combinations
-from vector import vector
-from sys import stdout
-from cruncher import Workforce
+#import multiprocessing
+#from datetime import datetime
+#from itertools import combinations
+#from vector import vector
+#from sys import stdout
+#from cruncher import Workforce
 from game import *
 from result import Results
 

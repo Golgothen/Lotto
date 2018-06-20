@@ -1,3 +1,8 @@
+from vector import vector
+from multiprocessing import Queue
+from itertools import combinations
+from cruncher import Workforce
+
 class Results():
     def __init__(self, games, outfile = None):
         self.games = games
@@ -17,16 +22,19 @@ class Results():
                 self.pick = picks
         if block is not None:
             self.block = block
-        workQ = multiprocessing.Queue()
-        resultQ = multiprocessing.Queue()
+        workQ = Queue()
+        resultQ = Queue()
 
         for i in combinations(range(1,self.games.poolSize - self.block + 1),self.pick - self.block):
             workQ.put(i)
-        for i in range(multiprocessing.cpu_count()):
-            workQ.put(None)
-        print('Added {:15,.0f} work blocks to the work que'.format(workQ.qsize()))
 
         wf = Workforce(workQ, resultQ, self.block, self.games)
+
+        for i in range(wf.workforceSize):
+            workQ.put(None)
+        
+        print('Added {:15,.0f} work blocks to the work que'.format(workQ.qsize()))
+
         #procs = []
         #for i in range(multiprocessing.cpu_count()):
         #    procs.append(Procs(i))

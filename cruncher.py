@@ -64,7 +64,10 @@ class Workforce():
             if i != m[0]:
                 #print('sending {} on pipe {}'.format(m[1],self.pipes[i].name))
                 self.pipes[i].send(m[1])
-        
+    
+    @property
+    def workforceSize(self):
+        return multiprocessing.cpu_count()
 
 class Cruncher(multiprocessing.Process):
     def __init__(self, workerCount, blockSize, game, jobQ, resultQ, p):
