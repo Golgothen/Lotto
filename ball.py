@@ -1,3 +1,6 @@
+from vector import vector
+from datetime import datetime
+
 class Ball():
     def __init__(self, v):
         self.value = v
@@ -10,17 +13,17 @@ class Ball():
         
     #@jit(nonpython=true)
     def draw(self, game):
-        if self.value in game.numbers + game.sups:
+        if self.value in game['Numbers'] or self.value in game['Sups']:
             if self.nonStreaks[0] != 0:
                 self.nonStreaks.insert(0,0)
             self.streaks[0] += 1
-            if self.value in game.numbers:
+            if self.value in game['Numbers']:
                 self.drawStreaks[0] += 1
-            if game.drawDate > self.lastDrawn:
-                self.lastDrawn = game.drawDate
-            for a in game.numbers:
+            if game['Drawdate'] > self.lastDrawn:
+                self.lastDrawn = game['Drawdate']
+            for a in game['Numbers']:
                 self.drawnWith[a-1] += 1
-            for a in game.sups:
+            for a in game['Sups']:
                 #self.drawnWith[a-1] += 1
                 self.supWith[a-1] += 1
         else:

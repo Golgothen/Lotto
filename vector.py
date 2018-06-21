@@ -1,3 +1,5 @@
+import operator
+
 class vector(list):
     def __init__(self, initSize = None):
         super(list, self).__init__()
@@ -24,7 +26,7 @@ class vector(list):
         return s
     
     @property
-    def n(self):
+    def size(self):
         return len(self)
     
     def __add__(self, v):
@@ -33,10 +35,10 @@ class vector(list):
         #
         r = vector()
         if type(v).__name__ == 'vector':        # If adding two vectors
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] + v[i])        # Add the two elements together
         else:                                   # If adding a scalar
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] + v)           # Add the scalar to each element
         return r                                # Return the new vector
     
@@ -46,10 +48,10 @@ class vector(list):
         #
         r = vector()
         if type(v).__name__ == 'vector':        # If multiplying two vectors
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] * v[i])        # Multiply the two elements together
         else:                                   # If multiplying a scalar
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] * v)           # Multiply each element by the scalar
         return r                                # Return the new vector
 
@@ -59,10 +61,10 @@ class vector(list):
         #
         r = vector()
         if type(v).__name__ == 'vector':        # If subtracting two vectors
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] - v[i])        # Subtract the two elements
         else:                                   # If subtracting a scalar
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] - v)           # Subtract the scalar from each element
         return r                                # Return the new vector
 
@@ -72,19 +74,15 @@ class vector(list):
         #
         r = vector()
         if type(v).__name__ == 'vector':        # If dividing two vectors
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] / v[i])        # Divide the two elements
         else:                                   # If dividing by a scalar
-            for i in range(self.n):             # Iterate through the vector elements
+            for i in range(self.size):          # Iterate through the vector elements
                 r.append(self[i] / v)           # Divide each element by the scalar
         return r                                # Return the new vector
     
     def __pow__(self, v):
         r = vector()
-        for i in range(self.n):
+        for i in range(self.size):
             r.append(self[i]**v)
         return r
-
-    @property
-    def mean(self):
-        return(sum(self)/self.n)

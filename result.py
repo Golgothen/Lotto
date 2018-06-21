@@ -44,7 +44,7 @@ class Results():
             
         while not workQ.empty():
             m = resultQ.get()
-            if m.message == 'MESSAGE':
+            if m.message == 'STATUS':
                 #procs[m.id].lastMessage = m.message
                 print('{}. {:9,.0f} blocks left'.format(m.params['MESSAGE'], workQ.qsize()))
             if m.message == 'RESULT':

@@ -1,3 +1,5 @@
+from ball import Ball
+
 class Field():
     def __init__(self):
         self.balls = {}
@@ -5,5 +7,6 @@ class Field():
             self.balls[a] = Ball(a)
     
     def draw(self, game):
-        for b in self.balls.values():
-            b.draw(game)
+        for g in game.games:
+            for b in self.balls.values():
+                b.draw(g)

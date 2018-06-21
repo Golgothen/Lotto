@@ -28,9 +28,9 @@ if __name__ == '__main__':
     if args.game[0].lower() == 'ozlotto':
         game = OzLotto()
     if args.game[0].lower() == 'powerball':
-        game = Powerball()
+        game = PowerBall()
     if args.game[0].lower() == 'uspowerball':
-        game = USPowerball()
+        game = USPowerBall()
     if args.game[0].lower() == 'megamillions':
         game = MegaMillions()
 
@@ -84,26 +84,30 @@ def printxy(x, y, text):
     stdout.write("\x1b7\x1b[%d;%df%s\x1b8" % (x, y, text))
     stdout.flush()
 
-#    field = Field()
-#    for a in range(len(games)-1, -1, -1):   # Itterate the list backward
-#        field.draw(games[a])
-#    
-#    m = []
-#    for b, v in field.balls.items():
-#        m.append(v.drawnWith)
-#    s = '  : '
-#    for a in range(45):
-#        s += '{:2.0f} '.format(a+1)
-#    print(s)
-#    for a in range(45):
-#
-#     s = '{:2.0f}  '.format(a+1)
-#        for b in range(45):
-#            if a==b:
-#                s += '   '
-#            else:
-#                s += '{:2.0f} '.format(m[a][b])
-#        print(s)
+def calc():
+    from field import Field
+    g = Lotto()
+    g.load("lotto.csv",['SAT'])
+    field = Field()
+    field.draw(g)
+    m = []
+    for b, v in field.balls.items():
+        m.append(v.drawnWith)
+    s = '  : '
+    for a in range(45):
+        s += '{:2.0f} '.format(a+1)
+    print(s)
+    for a in range(45):
+        s = '{:2.0f}  '.format(a+1)
+        for b in range(45):
+            if a==b:
+                s += '   '
+            else:
+                s += '{:2.0f} '.format(m[a][b])
+        print(s)
+    
+    for i in range(1,46):
+        print(field.balls[i])
 #    
 #    for g in games:
 #        d = g.play((1, 15, 11, 42, 31, 12, 36))

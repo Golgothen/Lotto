@@ -132,7 +132,7 @@ class OzLotto(Game):
                 continue
         return result, sum(result*self.divisionWeights)
 
-class Powerball(Game):
+class PowerBall(Game):
     def __init__(self):
         super().__init__(35)
         self.divisionWeights = vector([300000, 500, 20, 8, 2, 1])
