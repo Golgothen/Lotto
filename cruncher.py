@@ -3,12 +3,7 @@ from threading import Thread
 from vector import vector
 from datetime import datetime
 from itertools import combinations
-
-class Message():
-    def __init__(self, type, id, message):
-        self.type = type
-        self.id = id
-        self.message = message
+from message import Message
 
 class PipeWatcher(Thread):
 
@@ -29,10 +24,10 @@ class PipeWatcher(Thread):
                 while self.__pipe.poll(None):  # Block indefinately waiting for a message
                     m = self.__pipe.recv()
                     #print('Pipe {} receiced {}'.format(self.name,m))
-                    #response = getattr(self.__parent, m.message.lower())(m.params)
-                    self.__parent.updateBest(m)
-                    #if response is not None:
-                    #    self.send(response)
+                    response = getattr(self.__parent, m.message)(m.params)
+                    #self.__parent.updateBest(m)
+                    if response is not None:
+                        self.send(response)
             except (KeyboardInterrupt, SystemExit):
                 self.__running = False
                 continue
@@ -40,8 +35,9 @@ class PipeWatcher(Thread):
                 continue
 
     # Public method to allow the parent to send messages to the pipe
-    def send(self, msg):
-        self.__pipe.send(msg)
+    def send(self, m):
+        #print('Pipe {} receiced {}'.format(self.name,m))
+        self.__pipe.send(m)
 
 
 
@@ -51,38 +47,39 @@ class Workforce():
 
         self.workers = []
         self.pipes = []
-        for i in range(multiprocessing.cpu_count()):
+        for i in range(self.workforceSize):
             r, s = multiprocessing.Pipe()
             self.pipes.append(PipeWatcher(self, r, 'Hub{}'.format(i)))
             self.workers.append(Cruncher(i, blockSize, game, inQ, outQ, s))
             self.pipes[i].start()
             self.workers[i].start()
             
-    def updateBest(self, m):
-        #print('Workforce received best weight {} from process {}'.format(m[1], m[0]))
-        for i in range(len(self.pipes)):
-            if i != m[0]:
-                #print('sending {} on pipe {}'.format(m[1],self.pipes[i].name))
-                self.pipes[i].send(m[1])
+    def UPDATEBEST(self, m):
+        print('Workforce received best weight {} from process {}'.format(m['WEIGHT'], m['PROC_ID']))
+        for p in self.pipes:
+            #print(p.name)
+            #if p.name != 'Hub{}'.format(m['PROC_ID']):
+                #print('sending {} on pipe {}'.format(m, p.name))
+            p.send(Message('UPDATEBEST', m))
     
     @property
     def workforceSize(self):
         return multiprocessing.cpu_count()
 
 class Cruncher(multiprocessing.Process):
-    def __init__(self, workerCount, blockSize, game, jobQ, resultQ, p):
+    def __init__(self, id, blockSize, game, jobQ, resultQ, p):
         super(Cruncher,self).__init__()
         self.blockSize = blockSize
         self.game = game
         self.jobQ = jobQ
         self.resultQ = resultQ
         self.bestWeight = 0
-        self.workerCount = workerCount
-        self.pipe = p
+        self.id = id
+        self.p = p
     
     def run(self):
-        pw = PipeWatcher(self, self.pipe, 'Pipe{}'.format(self.workerCount))
-        pw.start()
+        self.pipe = PipeWatcher(self, self.p, 'Pipe{}'.format(self.id))
+        self.pipe.start()
         p = psutil.Process()
         p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
         while True:
@@ -98,19 +95,18 @@ class Cruncher(multiprocessing.Process):
                 #print(r['Numbers'])
                 r['Divisions'], r['Weight'] = self.game.play(r['Numbers'])
                 c+=self.game.len
-                r['Process'] = self.workerCount
                 if r['Weight'] > self.bestWeight:
                     self.bestWeight = r['Weight']
-                    self.pipe.send((self.workerCount,self.bestWeight))
-                    self.resultQ.put(Message('R', self.workerCount,r))
+                    self.pipe.send(Message('UPDATEBEST', PROC_ID = self.id, WEIGHT = self.bestWeight))
+                    self.resultQ.put(Message('RESULT', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
                     #print(self.resultQ.qsize())
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
             if s  > 0:
-                self.resultQ.put(Message('M',self.workerCount, 'Completed {:15,.0f} combinations in {:8,.2f} seconds. {:9,.0f} combinations per second. Block {}'.format(c, s, c/s, prefix)))
+                self.resultQ.put(Message('STATUS', PROC_ID = self.id, MESSAGE = 'Completed {:15,.0f} combinations in {:8,.2f} seconds. {:9,.0f} combinations per second. Block {}'.format(c, s, c/s, prefix)))
     
-    def updateBest(self, weight):
-        #print('Process {} received weight of {}'.format(self.workerCount, weight))
-        if weight > self.bestWeight:
+    def UPDATEBEST(self, m):
+        print('Process {} received weight of {} from process'.format(self.id, m['WEIGHT'], m['PROC_ID']))
+        if m['WEIGHT'] > self.bestWeight:
             self.bestWeight = weight
-            #print('Process {} updated best weight to {}'.format(self.workerCount, self.bestWeight))
+            print('Process {} updated best weight to {}'.format(self.id, self.bestWeight))

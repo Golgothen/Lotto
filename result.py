@@ -44,16 +44,16 @@ class Results():
             
         while not workQ.empty():
             m = resultQ.get()
-            if m.type == 'M':
+            if m.message == 'MESSAGE':
                 #procs[m.id].lastMessage = m.message
-                print('{}. {:9,.0f} blocks left'.format(m.message, workQ.qsize()))
-            if m.type == 'R':
+                print('{}. {:9,.0f} blocks left'.format(m.params['MESSAGE'], workQ.qsize()))
+            if m.message == 'RESULT':
                 #procs[m.id].lastResult = m.message
                 #if procs[m.id].lastResult['Weight'] > procs[m.id].bestResult['Weight']:
                 #    procs[m.id].bestResult = procs[m.id].lastResult.copy()
                 #print('Numbers = {}, Divisions = {}, Weight = {}'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
                 with open('{}-{}.txt'.format(self.outfile, self.pick),'a') as f:
-                    f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.message['Numbers'], m.message['Divisions'], m.message['Weight']))
+                    f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS'], m.params['WEIGHT']))
             #updateScreen(procs,workQ.qsize())
                 
         #for i in range(multiprocessing.cpu_count()):
