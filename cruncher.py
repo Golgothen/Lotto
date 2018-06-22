@@ -1,9 +1,10 @@
-import multiprocessing, psutil
+import multiprocessing, psutil, signal
 from threading import Thread
 #from vector import vector
 from datetime import datetime
 from itertools import combinations
 from message import Message
+import traceback, sys
 
 class PipeWatcher(Thread):
 
@@ -18,26 +19,23 @@ class PipeWatcher(Thread):
 
     def run(self):
         self.__running = True
-        #print('Pipe pid {}'.format(self.id))
         while self.__running:
             try:
                 while self.__pipe.poll(None):  # Block indefinately waiting for a message
                     m = self.__pipe.recv()
-                    #print('Pipe {} receiced {}'.format(self.name,m))
                     response = getattr(self.__parent, m.message)(m.params)
-                    #response = getattr(self.__parent, 'UPDATEBEST')(m.params)
-                    #self.__parent.updateBest(m)
                     if response is not None:
                         self.send(response)
             except (KeyboardInterrupt, SystemExit):
                 self.__running = False
                 continue
             except:
+                print('*** Exception caught in Pipe thread {} ***'.format(self.name))
+                traceback.print_exception(*sys.exc_info())
                 continue
 
     # Public method to allow the parent to send messages to the pipe
     def send(self, m):
-        #print('Pipe {} sending {}'.format(self.name,m))
         self.__pipe.send(m)
 
 class Workforce():
@@ -53,17 +51,22 @@ class Workforce():
             self.pipes[i].start()
             
     def UPDATEBEST(self, m):
-        #print('Workforce received best weight {} from process {}'.format(m['WEIGHT'], m['PROC_ID']))
-        #print(self.pipes)
         for p in self.pipes:
-            #print(p.name)
             if p.name != 'Hub{}'.format(m['PROC_ID']):
-                #print('sending {} on pipe {}'.format(m, p.name))
                 p.send(Message('UPDATEBEST', WEIGHT = m['WEIGHT'], PROC_ID = m['PROC_ID']))
     
     @property
     def workforceSize(self):
         return multiprocessing.cpu_count()
+    
+    def halt(self):
+        print('Telling worker processes to HALT')
+        for p in self.pipes:
+            p.send(Message('HALT'))
+    
+    def stop(self):
+        for w in self.workers:
+            w.join()
 
 class Cruncher(multiprocessing.Process):
     def __init__(self, proc_id, blockSize, game, jobQ, resultQ, p):
@@ -75,16 +78,17 @@ class Cruncher(multiprocessing.Process):
         self.bestWeight = 0
         self.id = proc_id
         self.p = p
-        self.pipe = None #PipeWatcher(self, self.p, 'Pipe{}'.format(self.id))
-        #print(self.id, self.p)
+        self.pipe = None
+        self.__running = False
     
     def run(self):
-        #print(self.id, self.p)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         self.pipe = PipeWatcher(self, self.p, 'Pipe{}'.format(self.id))
         self.pipe.start()
         p = psutil.Process()
         p.nice(psutil.IDLE_PRIORITY_CLASS)
-        while True:
+        self.__running = True
+        while self.__running:
             c = 0
             t = datetime.now()
             prefix = self.jobQ.get()
@@ -94,7 +98,6 @@ class Cruncher(multiprocessing.Process):
             for i in combinations(range(max(list(prefix))+1,self.game.poolSize+1),self.blockSize):
                 r = {}
                 r['Numbers'] = set(prefix + i)
-                #print(r['Numbers'])
                 r['Divisions'], r['Weight'] = self.game.play(r['Numbers'])
                 c+=self.game.len
                 if r['Weight'] > self.bestWeight:
@@ -108,7 +111,9 @@ class Cruncher(multiprocessing.Process):
                 self.resultQ.put(Message('STATUS', PROC_ID = self.id, MESSAGE = 'Completed {:15,.0f} combinations in {:8,.2f} seconds. {:9,.0f} combinations per second. Block {}'.format(c, s, c/s, prefix)))
     
     def UPDATEBEST(self, m):
-        #print('Process {} received weight of {} from process {}'.format(self.id, m['WEIGHT'], m['PROC_ID']))
         if m['WEIGHT'] > self.bestWeight:
             self.bestWeight = m['WEIGHT']
-            #print('Process {} updated best weight to {}'.format(self.id, self.bestWeight))
+    
+    def HALT(self, m):
+        print('Process {} received HALT command.'.format(self.id))
+        self.__running = False

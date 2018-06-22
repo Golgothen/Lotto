@@ -2,8 +2,6 @@ from datetime import datetime
 from vector import vector
 import csv
 
-
-
 class Game():
     #
     # Base class for other game types
