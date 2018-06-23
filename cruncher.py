@@ -43,7 +43,7 @@ class Workforce():
 
         self.workers = []
         self.pipes = []
-        for i in range(self.workforceSize):
+        for i in range(multiprocessing.cpu_count()):
             r, s = multiprocessing.Pipe()
             self.workers.append(Cruncher(i, blockSize, game, inQ, outQ, s))
             self.workers[i].start()
@@ -54,10 +54,6 @@ class Workforce():
         for p in self.pipes:
             if p.name != 'Hub{}'.format(m['PROC_ID']):
                 p.send(Message('UPDATEBEST', WEIGHT = m['WEIGHT'], PROC_ID = m['PROC_ID']))
-    
-    @property
-    def workforceSize(self):
-        return multiprocessing.cpu_count()
     
     def halt(self):
         print('Telling worker processes to HALT')
@@ -96,14 +92,25 @@ class Cruncher(multiprocessing.Process):
                 return None
             #self.resultQ.put(Message('M', self.workerCount, 'Starting block {}'.format(prefix)))
             for i in combinations(range(max(list(prefix))+1,self.game.poolSize+1),self.blockSize):
-                r = {}
-                r['Numbers'] = set(prefix + i)
-                r['Divisions'], r['Weight'] = self.game.play(r['Numbers'])
+                numbers = set(prefix + i)
+                r = self.game.play(numbers)
+                r['Numbers'] = numbers
                 c+=self.game.len
-                if r['Weight'] > self.bestWeight:
-                    self.bestWeight = r['Weight']
-                    self.pipe.send(Message('UPDATEBEST', PROC_ID = self.id, WEIGHT = self.bestWeight))
-                    self.resultQ.put(Message('RESULT', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
+                if 'Divisions' in r:
+                    if r['Weight'] > self.bestWeight:
+                        self.bestWeight = r['Weight']
+                        self.pipe.send(Message('UPDATEBEST', PROC_ID = self.id, WEIGHT = self.bestWeight))
+                        self.resultQ.put(Message('RESULT', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
+                else:
+                    #print(r)
+                    for k, v in r.items():
+                        if k == 'Numbers': continue
+                        #print('k = {}, v = {}'.format(k, v))
+                        if v['Weight'] > self.bestWeight:
+                            self.bestWeight = v['Weight']
+                            self.pipe.send(Message('UPDATEBEST', PROC_ID = self.id, WEIGHT = self.bestWeight))
+                            self.resultQ.put(Message('RESULT', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
+                            
                     #print(self.resultQ.qsize())
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)

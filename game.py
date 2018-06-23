@@ -43,7 +43,6 @@ class Lotto(Game):
         with open(filename) as f:
             reader = csv.reader(f)
             next(reader)        # Discard the heading line
-            
             for row in reader:
                 if row[0] in day:  # + ['WED','MON']
                     g = {}
@@ -53,31 +52,33 @@ class Lotto(Game):
                     self.games.append(g)
     
     def play(self, numbers):
-        result=vector(self.divisions)
+        result = {}
+        result['Divisions'] = vector(self.divisions)
         for g in self.games:
             drawcount = 0
             supcount = 0
             drawcount=len(g['Numbers'].intersection(numbers))
             supcount=len(g['Sups'].intersection(numbers))
             if drawcount == 6:
-                result[0]+=1
+                result['Divisions'][0]+=1
                 continue
             if drawcount == 5:
                 if supcount > 0:
-                    result[1]+=1
+                    result['Divisions'][1]+=1
                     continue
                 else:
-                    result[2]+=1
+                    result['Divisions'][2]+=1
                     continue
             if drawcount == 4:
-                result[3]+=1
+                result['Divisions'][3]+=1
                 continue
             if drawcount == 3 and supcount > 0:
-                result[4]+=1
+                result['Divisions'][4]+=1
                 continue
             if drawcount > 0 and supcount == 2:
-                result[5]+=1
-        return result, sum(result*self.divisionWeights)
+                result['Divisions'][5]+=1
+        result['Weight'] = sum(result['Divisions']*self.divisionWeights)
+        return result
 
 class OzLotto(Game):
     def __init__(self):
@@ -86,11 +87,10 @@ class OzLotto(Game):
         self.minPick = 7
         self.divisions = 7
     
-    def load(self, filename):
+    def load(self, filename, day = None):
         with open(filename) as f:
             reader = csv.reader(f)
             next(reader)        # Discard the heading line
-            
             for row in reader:
                 g = {}
                 g['Drawdate'] = datetime.strptime(row[0],"%d/%m/%Y")
@@ -99,36 +99,38 @@ class OzLotto(Game):
                 self.games.append(g)
     
     def play(self, numbers):
-        result=vector(self.divisions)
+        result = {}
+        result['Divisions'] = vector(self.divisions)
         for g in self.games:
             drawcount = 0
             supcount = 0
             drawcount=len(g['Numbers'].intersection(numbers))
             supcount=len(g['Sups'].intersection(numbers))
             if drawcount == 7:
-                result[0]+=1
+                result['Divisions'][0]+=1
                 continue
             if drawcount == 6:
                 if supcount > 0:
-                    result[1]+=1
+                    result['Divisions'][1]+=1
                     continue
                 else:
-                    result[2]+=1
+                    result['Divisions'][2]+=1
                     continue
             if drawcount == 5:
                 if supcount > 0:
-                    result[3]+=1
+                    result['Divisions'][3]+=1
                     continue
                 else:
-                    result[4]+=1
+                    result['Divisions'][4]+=1
                     continue
             if drawcount == 4:
-                result[5]+=1
+                result['Divisions'][5]+=1
                 continue
             if drawcount == 3 and supcount > 0:
-                result[6]+=1
+                result['Divisions'][6]+=1
                 continue
-        return result, sum(result*self.divisionWeights)
+        result['Weight'] = sum(result['Divisions']*self.divisionWeights) 
+        return result 
 
 class PowerBall(Game):
     def __init__(self):
@@ -136,8 +138,9 @@ class PowerBall(Game):
         self.divisionWeights = vector([300000, 500, 20, 8, 2, 1])
         self.minPick = 7
         self.divisions = 6
+        self.powerball = 20
     
-    def load(self, filename):
+    def load(self, filename, day = None):
         with open(filename) as f:
             reader = csv.reader(f)
             next(reader)        # Discard the heading line
@@ -150,65 +153,82 @@ class PowerBall(Game):
                 self.games.append(g)
     
     def play(self, numbers):
-        result = vector(self.divisions)
+        result = {}
+        for i in range(self.powerball):
+            result[i+1] = {'Divisions': vector(self.divisions), 'Weight' : 0}
         for g in self.games:
             drawcount=len(g['Numbers'].intersection(numbers))
             if drawcount > 2:
-                result[7-drawcount]+=1
-        return result, sum(result*self.divisionWeights) 
+                result[g['Powerball']]['Divisions'][7-drawcount]+=1
+        for k in result.keys():
+            result[k]['Weight'] = sum(result[k]['Divisions']*self.divisionWeights)
+        return result
 
 class MegaMillions(Game):
     def __init__(self):
         super().__init__(70)
-        self.divisionWeights = vector([250000, 2500, 50, 2, 1])
+        self.divisionWeights = vector([300000, 500, 20, 8, 2, 1])
         self.minPick = 5
         self.divisions = 5
+        self.powerball = 25
     
-    def load(self, filename):
+    def load(self, filename, day = None):
+        if day is None:
+            day = ['TUE','FRI']
         with open(filename) as f:
             reader = csv.reader(f)
             next(reader)        # Discard the heading line
-            
             for row in reader:
-                g = {}
-                g['Drawdate'] = datetime.strptime(row[0],"%b %d, %Y")
-                g['Day'] = row[1]
-                g['Numbers'] = set([int(i) for i in row[2:7]])
-                g['Megaball'] = int(row[7])
-                self.games.append(g)
+                if row[1].upper() in day:
+                    g = {}
+                    g['Drawdate'] = datetime.strptime(row[0],"%a, %b %d, %Y")
+                    g['Numbers'] = set([int(i) for i in row[2:7]])
+                    g['Powerball'] = int(row[7])
+                    print(g)
+                    self.games.append(g)
     
     def play(self, numbers):
-        result = vector(self.divisions)
+        result = {}
+        for i in range(self.powerball):
+            result[i+1] = {'Divisions': vector(self.divisions), 'Weight' : 0}
         for g in self.games:
             drawcount=len(g['Numbers'].intersection(numbers))
-            if drawcount > 0:
-                result[5-drawcount]+=1
-        return result, sum(result*self.divisionWeights) 
+            if drawcount > 2:
+                result[g['Powerball']]['Divisions'][self.divisions-drawcount]+=1
+        for k in result.keys():
+            result[k]['Weight'] = sum(result[k]['Divisions']*self.divisionWeights)
+        return result
 
 class USPowerBall(Game):
     def __init__(self):
         super().__init__(69)
-        self.divisionWeights = vector([250000, 2500, 50, 2, 1])
+        self.divisionWeights = vector([300000, 500, 20, 8, 2, 1])
         self.minPick = 5
         self.divisions = 5
+        self.powerball = 26
     
-    def load(self, filename):
+    def load(self, filename, day = None):
+        if day is None:
+            day = ['THU','SUN']
         with open(filename) as f:
             reader = csv.reader(f)
             next(reader)        # Discard the heading line
-            
             for row in reader:
-                g = {}
-                g['Drawdate'] = datetime.strptime(row[0], "%a, %b %d, %Y")
-                g['Day'] = row[1]
-                g['Numbers'] = set([int(i) for i in row[2:7]])
-                g['Powerball'] = int(row[7])
-                self.games.append(g)
+                if row[1].upper() in day:
+                    g = {}
+                    g['Drawdate'] = datetime.strptime(row[0],"%a, %b %d, %Y")
+                    g['Numbers'] = set([int(i) for i in row[2:7]])
+                    g['Powerball'] = int(row[7])
+                    self.games.append(g)
     
     def play(self, numbers):
-        result = vector(self.divisions)
+        result = {}
+        for i in range(self.powerball):
+            result[i+1] = {'Divisions': vector(self.divisions), 'Weight' : 0}
         for g in self.games:
             drawcount=len(g['Numbers'].intersection(numbers))
-            if drawcount > 0:
-                result[5-drawcount]+=1
-        return result, sum(result*self.divisionWeights) 
+            if drawcount > 2:
+                result[g['Powerball']]['Divisions'][self.divisions-drawcount]+=1
+        for k in result.keys():
+            result[k]['Weight'] = sum(result[k]['Divisions']*self.divisionWeights)
+        return result
