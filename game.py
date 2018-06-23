@@ -209,7 +209,7 @@ class USPowerBall(Game):
     
     def load(self, filename, day = None):
         if day is None:
-            day = ['THU','SUN']
+            day = ['WED','SAT']
         with open(filename) as f:
             reader = csv.reader(f)
             next(reader)        # Discard the heading line
@@ -228,6 +228,7 @@ class USPowerBall(Game):
         for g in self.games:
             drawcount=len(g['Numbers'].intersection(numbers))
             if drawcount > 2:
+                print(result)
                 result[g['Powerball']]['Divisions'][self.divisions-drawcount]+=1
         for k in result.keys():
             result[k]['Weight'] = sum(result[k]['Divisions']*self.divisionWeights)

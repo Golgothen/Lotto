@@ -56,8 +56,9 @@ if __name__ == '__main__':
     else:
         if args.file[0] == '.csv':
             args.file[0] = args.game[0] + args.file[0]
-        for d in args.day:
-            d = d.upper()
+        if args.day is not None:
+            for d in args.day:
+                d = d.upper()
         game.load(args.file[0], args.day)
     
         if args.pick[0] < game.minPick:
