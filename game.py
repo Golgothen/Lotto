@@ -44,7 +44,7 @@ class Lotto(Game):
             reader = csv.reader(f)
             next(reader)        # Discard the heading line
             for row in reader:
-                if row[0] in day:  # + ['WED','MON']
+                if row[0].upper() in day:  # + ['WED','MON']
                     g = {}
                     g['Drawdate'] = datetime.strptime(row[1],"%d/%m/%Y")
                     g['Numbers'] = set([int(i) for i in row[2:8]])

@@ -114,8 +114,7 @@ class Cruncher(multiprocessing.Process):
                     #print(self.resultQ.qsize())
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
-            if s  > 0:
-                self.resultQ.put(Message('STATUS', PROC_ID = self.id, MESSAGE = 'Completed {:15,.0f} combinations in {:8,.2f} seconds. {:9,.0f} combinations per second. Block {}'.format(c, s, c/s, prefix)))
+            self.resultQ.put(Message('COMPLETED', PROC_ID = self.id, BLOCK = prefix, ELAPSED = s, COMBINATIONS = c))
     
     def UPDATEBEST(self, m):
         if m['WEIGHT'] > self.bestWeight:
