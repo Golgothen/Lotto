@@ -24,6 +24,27 @@ if __name__ == '__main__':
             game = MegaMillions()
         return game
 
+    def processResult(m):
+        #print(m)
+        if m.params['RESULT_TYPE'] == 'BEST' and args.best:
+            with open('{}-{}_best.txt'.format(args.game[0], args.pick[0]),'a') as f:
+                if 'POWERBALL' in m.params:
+                    f.write('Numbers = {} PB = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS'], m.params['WEIGHT']))
+                else:
+                    f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS'], m.params['WEIGHT']))
+        if m.params['RESULT_TYPE'] == 'MOST' and args.most:
+            with open('{}-{}_most.txt'.format(args.game[0], args.pick[0]),'a') as f:
+                if 'POWERBALL' in m.params:
+                    f.write('Numbers = {} PB = {}, Divisions = {}, Wins = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS'], sum(m.params['DIVISIONS'])))
+                else:
+                    f.write('Numbers = {}, Divisions = {}, Wins = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS'], sum(m.params['DIVISIONS'])))
+        #if m.params['RESULT_TYPE'] == 'ALL' and args.all:
+        #    with open('{}-{}_all.txt'.format(args.game[0], args.pick[0]),'a') as f:
+        #        if 'POWERBALL' in m.params:
+        #            f.write('Numbers = {} PB = {}, Divisions = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS']))
+        #        else:
+        #            f.write('Numbers = {}, Divisions = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS']))
+
     ap = argparse.ArgumentParser()
     ap.add_argument('--game', nargs = 1, default = ['lotto'], help = ' REQUIRED: Games currently supported = Lotto, OzLotto, Powerball, USPowerball, MegaMillions. Default is Lotto')
     ap.add_argument('--file', nargs = 1, default = ['.csv'], help = ' REQUIRED: CSV File to load for game comparison. Default is <game>.csv')
@@ -31,9 +52,13 @@ if __name__ == '__main__':
     ap.add_argument('--pick', nargs = 1, type= int, default = [0], help = 'Size of ticket to test. Default is the game minimum (6 for Lotto, 7 for OzLotto)')
     ap.add_argument('--block', nargs = 1, type= int, default = [3], help = 'Size of the combination block.  Default is 3.  Larger blocks have exponentially more combinations')
     ap.add_argument('--resume', nargs = 1, default = None, help = 'Specify an interrupted job to restart')
+    ap.add_argument('--best', action = "store_true", default = True, help = 'Record best results')
+    ap.add_argument('--most', action = "store_true", help = 'Record most win results')
+    #ap.add_argument('--all', action = "store_true", default = False, help = 'Record all results')
+    
     args = ap.parse_args()
     
-    #print(args)
+    print(args)
     
     workQ = multiprocessing.Queue()
     resultQ = multiprocessing.Queue()
@@ -86,12 +111,8 @@ if __name__ == '__main__':
                 else:
                     print('Completed block {} ({:11,.0f} combinations) in {:7,.1f} seconds ({:9,.0f} coms/sec). {:12,.0f} blocks left.  Overall rate {:11,.0f} coms/sec'.format(m.params['BLOCK'], m.params['COMBINATIONS'], m.params['ELAPSED'], (0), workQ.qsize(), totalComs / elapsed))
             if m.message == 'RESULT':
-                with open('{}-{}.txt'.format(args.game[0], args.pick[0]),'a') as f:
-                    if 'POWERBALL' in m.params:
-                        f.write('Numbers = {} PB = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS'], m.params['WEIGHT']))
-                    else:
-                        f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS'], m.params['WEIGHT']))
-            
+                processResult(m)
+                
     except KeyboardInterrupt:
         # Dump the queue to file
         wf.halt()
@@ -104,18 +125,16 @@ if __name__ == '__main__':
             m = resultQ.get()
             if m.message == 'COMPLETED':
                 totalElapsed = datetime.now() - startTime
+                elapsed = (totalElapsed.microseconds / 1000000) + totalElapsed.seconds
                 totalComs += m.params['COMBINATIONS']
                 if m.params['ELAPSED'] > 0:
                     print('Completed block {} ({:11,.0f} combinations) in {:7,.1f} seconds ({:9,.0f} coms/sec). {:12,.0f} blocks left.  Overall rate {:11,.0f} coms/sec'.format(m.params['BLOCK'], m.params['COMBINATIONS'], m.params['ELAPSED'], (m.params['COMBINATIONS'] / m.params['ELAPSED']), workQ.qsize(), totalComs / elapsed))
                 else:
                     print('Completed block {} ({:11,.0f} combinations) in {:7,.1f} seconds ({:9,.0f} coms/sec). {:12,.0f} blocks left.  Overall rate {:11,.0f} coms/sec'.format(m.params['BLOCK'], m.params['COMBINATIONS'], m.params['ELAPSED'], (0), workQ.qsize(), totalComs / elapsed))
             if m.message == 'RESULT':
-                with open('{}-{}.txt'.format(args.game[0], args.pick[0]),'a') as f:
-                    if 'POWERBALL' in m.params:
-                        f.write('Numbers = {} PB = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS'], m.params['WEIGHT']))
-                    else:
-                        f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS'], m.params['WEIGHT']))
-            
+                processResult(m)
+    
+    print('{:30,.0f} combinations tested in {:15,.0f} seconds.'.format(totalComs, elapsed))
     
 def calc():
     from field import Field

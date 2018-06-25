@@ -193,7 +193,7 @@ class MegaMillions(Game):
             result[i+1] = {'Divisions': vector(self.divisions), 'Weight' : 0}
         for g in self.games:
             drawcount=len(g['Numbers'].intersection(numbers))
-            if drawcount > 2:
+            if drawcount > 0:
                 result[g['Powerball']]['Divisions'][self.divisions-drawcount]+=1
         for k in result.keys():
             result[k]['Weight'] = sum(result[k]['Divisions']*self.divisionWeights)
@@ -227,8 +227,9 @@ class USPowerBall(Game):
             result[i+1] = {'Divisions': vector(self.divisions), 'Weight' : 0}
         for g in self.games:
             drawcount=len(g['Numbers'].intersection(numbers))
-            if drawcount > 2:
-                print(result)
+            if drawcount > 0:
+                #print(result)
+                #print(g)
                 result[g['Powerball']]['Divisions'][self.divisions-drawcount]+=1
         for k in result.keys():
             result[k]['Weight'] = sum(result[k]['Divisions']*self.divisionWeights)

@@ -50,10 +50,10 @@ class Workforce():
             self.pipes.append(PipeWatcher(self, r, 'Hub{}'.format(i)))
             self.pipes[i].start()
             
-    def UPDATEBEST(self, m):
+    def BROADCAST(self, m):
         for p in self.pipes:
             if p.name != 'Hub{}'.format(m['PROC_ID']):
-                p.send(Message('UPDATEBEST', WEIGHT = m['WEIGHT'], PROC_ID = m['PROC_ID']))
+                p.send(Message('BROADCAST', **m))
     
     def halt(self):
         print('Telling worker processes to HALT')
@@ -72,6 +72,7 @@ class Cruncher(multiprocessing.Process):
         self.jobQ = jobQ
         self.resultQ = resultQ
         self.bestWeight = 0
+        self.mostWon = 0
         self.id = proc_id
         self.p = p
         self.pipe = None
@@ -99,8 +100,14 @@ class Cruncher(multiprocessing.Process):
                 if 'Divisions' in r:
                     if r['Weight'] > self.bestWeight:
                         self.bestWeight = r['Weight']
-                        self.pipe.send(Message('UPDATEBEST', PROC_ID = self.id, WEIGHT = self.bestWeight))
-                        self.resultQ.put(Message('RESULT', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
+                        self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'BESTWEIGHT', VALUE = self.bestWeight))
+                        self.resultQ.put(Message('RESULT', RESULT_TYPE = 'BEST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
+                    if sum(r['Divisions']) > self.mostWon:
+                        self.mostWon = sum(r['Divisions'])
+                        self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'MOSTWON', VALUE = self.mostWon))
+                        self.resultQ.put(Message('RESULT', RESULT_TYPE = 'MOST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
+                    #if sum(r['Divisions']) > 0:
+                    #    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'ALL', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
                 else:
                     #print(r)
                     for k, v in r.items():
@@ -108,17 +115,26 @@ class Cruncher(multiprocessing.Process):
                         #print('k = {}, v = {}'.format(k, v))
                         if v['Weight'] > self.bestWeight:
                             self.bestWeight = v['Weight']
-                            self.pipe.send(Message('UPDATEBEST', PROC_ID = self.id, WEIGHT = self.bestWeight))
-                            self.resultQ.put(Message('RESULT', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
-                            
-                    #print(self.resultQ.qsize())
+                            self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'BESTWEIGHT', VALUE = self.bestWeight))
+                            self.resultQ.put(Message('RESULT', RESULT_TYPE = 'BEST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
+                        if sum(v['Divisions']) > self.mostWon:
+                            self.mostWon = sum(v['Divisions'])
+                            self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'MOSTWON', VALUE = self.mostWon))
+                            self.resultQ.put(Message('RESULT', RESULT_TYPE = 'MOST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
+                        #if sum(v['Divisions']) > 0:
+                        #    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'ALL', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
             self.resultQ.put(Message('COMPLETED', PROC_ID = self.id, BLOCK = prefix, ELAPSED = s, COMBINATIONS = c))
-    
-    def UPDATEBEST(self, m):
-        if m['WEIGHT'] > self.bestWeight:
-            self.bestWeight = m['WEIGHT']
+        print('Process {} finished.'.format(self.id))
+        
+    def BROADCAST(self, m):
+        if m['STAT_TYPE'] == 'BESTWEIGHT':
+            if m['VALUE'] > self.bestWeight:
+                self.bestWeight = m['VALUE']
+        if m['STAT_TYPE'] == 'MOSTWON':
+            if m['VALUE'] > self.mostWon:
+                self.mostWon = m['VALUE']
     
     def HALT(self, m):
         print('Process {} received HALT command.'.format(self.id))
