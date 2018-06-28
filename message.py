@@ -10,3 +10,6 @@ class Message():
         for k in self.params.keys():
             s += ' {} = {};'.format(k, self.params[k])
         return s
+    
+    def __repr__(self):
+        return str(self)
