@@ -2,7 +2,7 @@ import socket, pickle
 from message import Message
 from mplogger import *
 
-BUFFER_SIZE = 8192
+BUFFER_SIZE = 1024
 SIZE_HEADER = 8
 BYTE_ORDER = 'big'
 
@@ -51,6 +51,7 @@ class Connection():
             data = self.socket.recv(messageSize)
         else:
             data = b''
+            #chunks = []
             while messageSize > BUFFER_SIZE:
                 d = self.socket.recv(BUFFER_SIZE)
                 self.logger.debug('Pulling {} bytes from buffer'.format(len(d)))
