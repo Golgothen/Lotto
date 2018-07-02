@@ -4,12 +4,27 @@ from cruncher import Workforce
 from datetime import datetime
 from game import Lotto, OzLotto, PowerBall, USPowerBall, MegaMillions
 import pickle, os, multiprocessing
-
+from connection import Connection
+from message import Message
+from mplogger import *
 
         
 if __name__ == '__main__':
 
     totalComs = 0
+    
+    loggingQueue = multiprocessing.Queue()
+    listener = LogListener(loggingQueue)
+    listener.start()
+    
+    logging.config.dictConfig(sender_config)
+    
+    config = sender_config
+    config['handlers']['queue']['queue'] = loggingQueue
+
+    logging.config.dictConfig(sender_config)
+    logger = logging.getLogger('application')
+    
     
     def getGame():            
         if args.game[0].lower() == 'lotto':
@@ -26,18 +41,11 @@ if __name__ == '__main__':
 
     def processResult(m):
         #print(m)
-        if m.params['RESULT_TYPE'] == 'BEST' and args.best:
-            with open('{}-{}_best.txt'.format(args.game[0], args.pick[0]),'a') as f:
-                if 'POWERBALL' in m.params:
-                    f.write('Numbers = {} PB = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS'], m.params['WEIGHT']))
-                else:
-                    f.write('Numbers = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS'], m.params['WEIGHT']))
-        if m.params['RESULT_TYPE'] == 'MOST' and args.most:
-            with open('{}-{}_most.txt'.format(args.game[0], args.pick[0]),'a') as f:
-                if 'POWERBALL' in m.params:
-                    f.write('Numbers = {} PB = {}, Divisions = {}, Wins = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS'], sum(m.params['DIVISIONS'])))
-                else:
-                    f.write('Numbers = {}, Divisions = {}, Wins = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS'], sum(m.params['DIVISIONS'])))
+        with open('{}-{}_{}.txt'.format(m.params['GAMEID'], m.params['PICK'], m.params['RESULT_TYPE']),'a') as f:
+            #if 'POWERBALL' in m.params:
+            #    f.write('Numbers = {} PB = {}, Divisions = {}, Weight = {}.\n'.format(m.params['NUMBERS'], m.params['POWERBALL'], m.params['DIVISIONS'], m.params['WEIGHT']))
+            #else:
+            f.write('Numbers = {}, Divisions = {}.\n'.format(m.params['RESULT'].numbers, m.params['RESULT'].divisions))
         #if m.params['RESULT_TYPE'] == 'ALL' and args.all:
         #    with open('{}-{}_all.txt'.format(args.game[0], args.pick[0]),'a') as f:
         #        if 'POWERBALL' in m.params:
@@ -46,14 +54,9 @@ if __name__ == '__main__':
         #            f.write('Numbers = {}, Divisions = {}.\n'.format(m.params['NUMBERS'], m.params['DIVISIONS']))
 
     ap = argparse.ArgumentParser()
-    ap.add_argument('--game', nargs = 1, default = ['lotto'], help = ' REQUIRED: Games currently supported = Lotto, OzLotto, Powerball, USPowerball, MegaMillions. Default is Lotto')
-    ap.add_argument('--file', nargs = 1, default = ['.csv'], help = ' REQUIRED: CSV File to load for game comparison. Default is <game>.csv')
-    ap.add_argument('--day', nargs = '+', default = None, help = 'Applies to Lotto (MON, WED, SAT), MegaMillions (TUE, FRI) and US Powerball (THU, SUN). Select which days to include. Seperate arguments with commas.')
-    ap.add_argument('--pick', nargs = 1, type= int, default = [0], help = 'Size of ticket to test. Default is the game minimum (6 for Lotto, 7 for OzLotto)')
     ap.add_argument('--block', nargs = 1, type= int, default = [3], help = 'Size of the combination block.  Default is 3.  Larger blocks have exponentially more combinations')
-    ap.add_argument('--resume', nargs = 1, default = None, help = 'Specify an interrupted job to restart')
-    ap.add_argument('--best', action = "store_true", default = True, help = 'Record best results')
-    ap.add_argument('--most', action = "store_true", help = 'Record most win results')
+    ap.add_argument('--server', nargs = 1, default = ['localhost'], help = 'Specify a block server to get work from (IP address or resolvable host name)')
+    ap.add_argument('--port', nargs = 1, type = int, default = [2345], help = 'Specify a port to connect on (default = 2345)')
     #ap.add_argument('--all', action = "store_true", default = False, help = 'Record all results')
     
     args = ap.parse_args()
@@ -62,45 +65,29 @@ if __name__ == '__main__':
     
     workQ = multiprocessing.Queue()
     resultQ = multiprocessing.Queue()
-    game = getGame()
-    if args.resume is not None:
-        print('Resuming...')
-        restorefile = args.resume[0] 
-        f = open(restorefile, 'rb')
-        args = pickle.load(f)
-        game = getGame()
-        game.load(args.file[0], args.day)
-        #print(args)
-        while True:
-            try:
-                workQ.put(pickle.load(f))
-            except (EOFError, pickle.UnpicklingError):
-                break
-        f.close()
-        os.remove(restorefile)
-    else:
-        if args.file[0] == '.csv':
-            args.file[0] = args.game[0] + args.file[0]
-        if args.day is not None:
-            for d in args.day:
-                d = d.upper()
-        game.load(args.file[0], args.day)
-    
-        if args.pick[0] < game.minPick:
-            args.pick[0] = game.minPick
-    
-        if args.block[0] > game.minPick + 1:
-            args.block[0] = game.minPick - 1
-        for i in combinations(range(1, game.poolSize - args.block[0] + 1), args.pick[0] - args.block[0]):
-            workQ.put(i)
-        print('Added {:15,.0f} work blocks to the work queue'.format(workQ.qsize()))
-        for i in range(multiprocessing.cpu_count()):
-            workQ.put(None)
+    host = args.server[0]
+    port = args.port[0]
+
+
     startTime = datetime.now()
-    wf = Workforce(workQ, resultQ, args.block[0], game)
-    
+    wf = Workforce(workQ, resultQ, host, port, config)
+    c = Connection(config)
+    c.connect(host, port)
+    for i in range(wf.crunchers):
+        c.send(Message('GET_BLOCK'))
+        workQ.put(c.recv())
+    c.close()
+    elapsed = 0
     try:
-        while not workQ.empty():
+        while True:
+            #logger.debug('Work que has {} items'.format(workQ.qsize()))
+            if workQ.qsize() < wf.crunchers:
+                logger.debug('Adding {} items to work que'.format(wf.crunchers-workQ.qsize()))
+                c.connect(host, port)
+                for i in range(wf.crunchers-workQ.qsize()):
+                    c.send(Message('GET_BLOCK'))
+                    workQ.put(c.recv())
+                c.close()
             m = resultQ.get()
             if m.message == 'COMPLETED':
                 totalElapsed = datetime.now() - startTime
@@ -116,8 +103,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         # Dump the queue to file
         wf.halt()
-        with open('{}.dat'.format(args.game[0]), 'wb') as f:
-            pickle.dump(args, f)
+        with open('cruncher.dat', 'wb') as f:
             while not workQ.empty():
                 pickle.dump(workQ.get(), f)
         wf.stop()
@@ -135,6 +121,7 @@ if __name__ == '__main__':
                 processResult(m)
     
     print('{:30,.0f} combinations tested in {:15,.0f} seconds.'.format(totalComs, elapsed))
+    listener.stop()
     
 def calc():
     from field import Field

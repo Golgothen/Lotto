@@ -5,6 +5,9 @@ from datetime import datetime
 from itertools import combinations
 from message import Message
 import traceback, sys
+from game import *
+from connection import Connection
+from mplogger import *
 
 class PipeWatcher(Thread):
 
@@ -29,6 +32,8 @@ class PipeWatcher(Thread):
             except (KeyboardInterrupt, SystemExit):
                 self.__running = False
                 continue
+            except BrokenPipeError:
+                return
             except:
                 print('*** Exception caught in Pipe thread {} ***'.format(self.name))
                 traceback.print_exception(*sys.exc_info())
@@ -39,13 +44,19 @@ class PipeWatcher(Thread):
         self.__pipe.send(m)
 
 class Workforce():
-    def __init__(self, inQ, outQ, blockSize, game):
-
+    def __init__(self, inQ, outQ, host, port, config):
+        self.games = {}
         self.workers = []
         self.pipes = []
-        for i in range(multiprocessing.cpu_count()):
+        self.host = host
+        self.port = port
+        self.con = Connection(config)
+        logging.config.dictConfig(config)
+        self.logger = logging.getLogger('workforce')
+        
+        for i in range(self.crunchers):
             r, s = multiprocessing.Pipe()
-            self.workers.append(Cruncher(i, blockSize, game, inQ, outQ, s))
+            self.workers.append(Cruncher(i, inQ, outQ, s, config))
             self.workers[i].start()
             self.pipes.append(PipeWatcher(self, r, 'Hub{}'.format(i)))
             self.pipes[i].start()
@@ -55,6 +66,16 @@ class Workforce():
             if p.name != 'Hub{}'.format(m['PROC_ID']):
                 p.send(Message('BROADCAST', **m))
     
+    def GETGAME(self, m):
+        if m['GAME'] not in self.games:
+            self.con.connect(self.host, self.port)
+            self.con.send(Message('GET_DATA', GAME = m['GAME']))
+            self.games[m['GAME']] = self.con.recv().params['GAME']
+            self.con.close()
+            self.logger.debug('Loaded new game data for {}'.format(m['GAME']))
+        self.logger.debug(self.games)
+        self.pipes[m['PROC_ID']].send(Message('GAME_DATA', GAME = self.games[m['GAME']]))
+    
     def halt(self):
         print('Telling worker processes to HALT')
         for p in self.pipes:
@@ -63,22 +84,30 @@ class Workforce():
     def stop(self):
         for w in self.workers:
             w.join()
+    
+    @property
+    def crunchers(self):
+        return 2 #multiprocessing.cpu_count()
+
 
 class Cruncher(multiprocessing.Process):
-    def __init__(self, proc_id, blockSize, game, jobQ, resultQ, p):
+    def __init__(self, proc_id, jobQ, resultQ, p, config):
         super(Cruncher,self).__init__()
-        self.blockSize = blockSize
-        self.game = game
+        self.game = None
         self.jobQ = jobQ
         self.resultQ = resultQ
-        self.bestWeight = 0
-        self.mostWon = 0
         self.id = proc_id
         self.p = p
         self.pipe = None
         self.__running = False
+        self.wait = multiprocessing.Event()
+        self.config = config
+        self.best = None
+        self.most = None
     
     def run(self):
+        logging.config.dictConfig(self.config)
+        self.logger = logging.getLogger('cruncher')
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         self.pipe = PipeWatcher(self, self.p, 'Pipe{}'.format(self.id))
         self.pipe.start()
@@ -88,54 +117,51 @@ class Cruncher(multiprocessing.Process):
         while self.__running:
             c = 0
             t = datetime.now()
-            prefix = self.jobQ.get()
+            block = self.jobQ.get()
+            print(block)
+            prefix = block.params['BLOCK']
+            self.pick = block.params['PICK']
+            blockSize = self.pick - len(prefix)
+            self.gameID = block.params['GAME']
+            if self.gameID != type(self.game).__name__:
+                self.pipe.send(Message('GETGAME', GAME = self.gameID, PROC_ID = self.id))
+                self.wait.wait()
+                self.wait.clear()
+            self.best = block.params['BEST']
+            self.most = block.params['MOST']
             if prefix is None:
                 return None
-            #self.resultQ.put(Message('M', self.workerCount, 'Starting block {}'.format(prefix)))
-            for i in combinations(range(max(list(prefix))+1,self.game.poolSize+1),self.blockSize):
+            self.logger.debug('Starting block {}'.format(prefix))
+            for i in combinations(range(max(list(prefix))+1,self.game.poolSize+1),blockSize):
                 numbers = set(prefix + i)
                 r = self.game.play(numbers)
-                r['Numbers'] = numbers
-                c+=self.game.len
-                if 'Divisions' in r:
-                    if r['Weight'] > self.bestWeight:
-                        self.bestWeight = r['Weight']
-                        self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'BESTWEIGHT', VALUE = self.bestWeight))
-                        self.resultQ.put(Message('RESULT', RESULT_TYPE = 'BEST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
-                    if sum(r['Divisions']) > self.mostWon:
-                        self.mostWon = sum(r['Divisions'])
-                        self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'MOSTWON', VALUE = self.mostWon))
-                        self.resultQ.put(Message('RESULT', RESULT_TYPE = 'MOST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
-                    #if sum(r['Divisions']) > 0:
-                    #    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'ALL', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = r['Divisions'], WEIGHT = r['Weight']))
-                else:
-                    #print(r)
-                    for k, v in r.items():
-                        if k == 'Numbers': continue
-                        #print('k = {}, v = {}'.format(k, v))
-                        if v['Weight'] > self.bestWeight:
-                            self.bestWeight = v['Weight']
-                            self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'BESTWEIGHT', VALUE = self.bestWeight))
-                            self.resultQ.put(Message('RESULT', RESULT_TYPE = 'BEST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
-                        if sum(v['Divisions']) > self.mostWon:
-                            self.mostWon = sum(v['Divisions'])
-                            self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'MOSTWON', VALUE = self.mostWon))
-                            self.resultQ.put(Message('RESULT', RESULT_TYPE = 'MOST', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
-                        #if sum(v['Divisions']) > 0:
-                        #    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'ALL', PROC_ID = self.id, NUMBERS = r['Numbers'], DIVISIONS = v['Divisions'], WEIGHT = v['Weight'], POWERBALL = k))
+                c += self.game.len
+                if r*self.game.divisionWeights > self.best:
+                    self.best = r*self.game.divisionWeights
+                    self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'BESTWEIGHT', VALUE = self.best, GAMEID = self.gameID, PICK = self.pick))
+                    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'BEST', PROC_ID = self.id, RESULT = self.best, GAMEID = self.gameID, PICK = self.pick))
+                if r > self.most:
+                    self.most = r
+                    self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'MOSTWON', VALUE = self.most, GAMEID = self.gameID, PICK = self.pick))
+                    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'MOST', PROC_ID = self.id, RESULT = self.most, GAMEID = self.gameID, PICK = self.pick))
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
             self.resultQ.put(Message('COMPLETED', PROC_ID = self.id, BLOCK = prefix, ELAPSED = s, COMBINATIONS = c))
         print('Process {} finished.'.format(self.id))
         
     def BROADCAST(self, m):
-        if m['STAT_TYPE'] == 'BESTWEIGHT':
-            if m['VALUE'] > self.bestWeight:
-                self.bestWeight = m['VALUE']
-        if m['STAT_TYPE'] == 'MOSTWON':
-            if m['VALUE'] > self.mostWon:
-                self.mostWon = m['VALUE']
+        if m['GAMEID'] == self.gameID and m['PICK'] == self.pick:
+            if m['STAT_TYPE'] == 'BESTWEIGHT':
+                if m['VALUE'] > self.best:
+                    self.best = m['VALUE']
+            if m['STAT_TYPE'] == 'MOSTWON':
+                if m['VALUE'] > self.most:
+                    self.most = m['VALUE']
     
     def HALT(self, m):
         print('Process {} received HALT command.'.format(self.id))
         self.__running = False
+    
+    def GAME_DATA(self, m):
+        self.game = m['GAME']
+        self.wait.set()

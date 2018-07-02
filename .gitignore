@@ -1,9 +1,9 @@
 *.txt
+*.rar
+*.dat
+*.log
 /.pydevproject
 /.project
 /test.py
 /WorkQueue.pkl
 /lotto.dat
-/uspowerball.dat
-/ozlotto.dat
-/ozlotto.rar
