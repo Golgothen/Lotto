@@ -1,8 +1,4 @@
-/cruncher.cpython-36.pyc
-/vector.cpython-36.pyc
-/game.cpython-36.pyc
-/result.cpython-36.pyc
-/message.cpython-36.pyc
-/ball.cpython-36.pyc
-/field.cpython-36.pyc
-/lotto.cpython-36.pyc
+*.pyc
+*.txt
+*.log
+*.dat

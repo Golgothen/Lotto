@@ -8,6 +8,7 @@ import traceback, sys
 from game import *
 from connection import Connection
 from mplogger import *
+from time import sleep
 
 class PipeWatcher(Thread):
 
@@ -44,7 +45,7 @@ class PipeWatcher(Thread):
         self.__pipe.send(m)
 
 class Workforce():
-    def __init__(self, inQ, outQ, host, port, config):
+    def __init__(self, inQ, host, port, config):
         self.games = {}
         self.workers = []
         self.pipes = []
@@ -52,29 +53,51 @@ class Workforce():
         self.port = port
         self.con = Connection(config)
         logging.config.dictConfig(config)
+        self.connectionBusy = False
         self.logger = logging.getLogger('workforce')
         
         for i in range(self.crunchers):
             r, s = multiprocessing.Pipe()
-            self.workers.append(Cruncher(i, inQ, outQ, s, config))
+            self.workers.append(Cruncher(i, inQ, s, config))
             self.workers[i].start()
             self.pipes.append(PipeWatcher(self, r, 'Hub{}'.format(i)))
             self.pipes[i].start()
             
-    def BROADCAST(self, m):
+    def RESULT(self, m):
         for p in self.pipes:
             if p.name != 'Hub{}'.format(m['PROC_ID']):
-                p.send(Message('BROADCAST', **m))
+                p.send(Message('RESULT', **m))
+        while self.connectionBusy:
+            sleep(0.1)
+        self.connectionBusy = True
+        self.con.connect(self.host, self.port)
+        self.con.send(Message('RESULT', **m))
+        self.con.close()
+        self.connectionBusy = False
+
+    def COMPLETE(self, m):
+        while self.connectionBusy:
+            sleep(0.1)
+        self.connectionBusy = True
+        self.con.connect(self.host, self.port)
+        self.con.send(Message('COMPLETE', **m))
+        self.con.close()
+        self.connectionBusy = False
     
     def GETGAME(self, m):
-        if m['GAME'] not in self.games:
+        while self.connectionBusy:
+            sleep(0.1)
+        if m['GAMEID'] not in self.games:
+            self.connectionBusy = True
             self.con.connect(self.host, self.port)
-            self.con.send(Message('GET_DATA', GAME = m['GAME']))
-            self.games[m['GAME']] = self.con.recv().params['GAME']
+            self.con.send(Message('GET_DATA', GAMEID = m['GAMEID']))
+            self.games[m['GAMEID']] = self.con.recv().params['GAME']
             self.con.close()
-            self.logger.debug('Loaded new game data for {}'.format(m['GAME']))
-        self.logger.debug(self.games)
-        self.pipes[m['PROC_ID']].send(Message('GAME_DATA', GAME = self.games[m['GAME']]))
+            self.logger.debug('Loaded new game data for {}'.format(m['GAMEID']))
+            self.connectionBusy = False
+        else:
+            self.logger.debug('Loaded game data from cache')
+        self.pipes[m['PROC_ID']].send(Message('GAME_DATA', GAME = self.games[m['GAMEID']]))
     
     def halt(self):
         print('Telling worker processes to HALT')
@@ -87,15 +110,15 @@ class Workforce():
     
     @property
     def crunchers(self):
-        return 2 #multiprocessing.cpu_count()
+        return multiprocessing.cpu_count()
 
 
 class Cruncher(multiprocessing.Process):
-    def __init__(self, proc_id, jobQ, resultQ, p, config):
+    def __init__(self, proc_id, jobQ, p, config):
         super(Cruncher,self).__init__()
         self.game = None
         self.jobQ = jobQ
-        self.resultQ = resultQ
+        #self.resultQ = resultQ
         self.id = proc_id
         self.p = p
         self.pipe = None
@@ -104,6 +127,7 @@ class Cruncher(multiprocessing.Process):
         self.config = config
         self.best = None
         self.most = None
+        self.gameID = None
     
     def run(self):
         logging.config.dictConfig(self.config)
@@ -118,13 +142,13 @@ class Cruncher(multiprocessing.Process):
             c = 0
             t = datetime.now()
             block = self.jobQ.get()
-            print(block)
+            #print(block)
             prefix = block.params['BLOCK']
             self.pick = block.params['PICK']
             blockSize = self.pick - len(prefix)
             self.gameID = block.params['GAME']
             if self.gameID != type(self.game).__name__:
-                self.pipe.send(Message('GETGAME', GAME = self.gameID, PROC_ID = self.id))
+                self.pipe.send(Message('GETGAME', GAMEID = '{}{}'.format(self.gameID, self.pick), PROC_ID = self.id))
                 self.wait.wait()
                 self.wait.clear()
             self.best = block.params['BEST']
@@ -138,25 +162,25 @@ class Cruncher(multiprocessing.Process):
                 c += self.game.len
                 if r*self.game.divisionWeights > self.best:
                     self.best = r*self.game.divisionWeights
-                    self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'BESTWEIGHT', VALUE = self.best, GAMEID = self.gameID, PICK = self.pick))
-                    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'BEST', PROC_ID = self.id, RESULT = self.best, GAMEID = self.gameID, PICK = self.pick))
+                    #self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'BESTWEIGHT', VALUE = self.best, GAMEID = self.gameID, PICK = self.pick))
+                    self.pipe.send(Message('RESULT', PROC_ID = self.id, RESULT_TYPE = 'BEST', RESULT = self.best, GAMEID = self.gameID, PICK = self.pick))
                 if r > self.most:
                     self.most = r
-                    self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'MOSTWON', VALUE = self.most, GAMEID = self.gameID, PICK = self.pick))
-                    self.resultQ.put(Message('RESULT', RESULT_TYPE = 'MOST', PROC_ID = self.id, RESULT = self.most, GAMEID = self.gameID, PICK = self.pick))
+                    #self.pipe.send(Message('BROADCAST', PROC_ID = self.id, STAT_TYPE = 'MOSTWON', VALUE = self.most, GAMEID = self.gameID, PICK = self.pick))
+                    self.pipe.send(Message('RESULT', PROC_ID = self.id, RESULT_TYPE = 'MOST', RESULT = self.most, GAMEID = self.gameID, PICK = self.pick))
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
-            self.resultQ.put(Message('COMPLETED', PROC_ID = self.id, BLOCK = prefix, ELAPSED = s, COMBINATIONS = c))
+            self.pipe.send(Message('COMPLETE', PROC_ID = self.id, GAMEID = self.gameID, PICK = self.pick, BLOCK = prefix, ELAPSED = s, COMBINATIONS = c))
         print('Process {} finished.'.format(self.id))
         
-    def BROADCAST(self, m):
+    def RESULT(self, m):
         if m['GAMEID'] == self.gameID and m['PICK'] == self.pick:
-            if m['STAT_TYPE'] == 'BESTWEIGHT':
-                if m['VALUE'] > self.best:
-                    self.best = m['VALUE']
-            if m['STAT_TYPE'] == 'MOSTWON':
-                if m['VALUE'] > self.most:
-                    self.most = m['VALUE']
+            if m['RESULT_TYPE'] == 'BEST':
+                if m['RESULT'] > self.best:
+                    self.best = m['RESULT']
+            if m['RESULT_TYPE'] == 'MOST':
+                if m['RESULT'] > self.most:
+                    self.most = m['RESULT']
     
     def HALT(self, m):
         print('Process {} received HALT command.'.format(self.id))
