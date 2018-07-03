@@ -168,7 +168,10 @@ class Workforce():
                 for i in range(self.workQueueLimit - self.workQ.qsize()):
                     try:
                         self.con.send(Message('GET_BLOCK'))
-                        b = self.con.recv()
+                        try:
+                            b = self.con.recv()
+                        except:
+                            continue
                         self.logger.info('<<<========={}'.format(b.params['BLOCK']))
                         self.workQ.put(b)
                         success = True
