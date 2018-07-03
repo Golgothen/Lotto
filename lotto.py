@@ -1,11 +1,11 @@
-import argparse, os
-from itertools import combinations
+import argparse, sys, multiprocessing, os
+#from itertools import combinations
 from cruncher import Workforce
-from datetime import datetime
-from game import Lotto, OzLotto, PowerBall, USPowerBall, MegaMillions
-import pickle, os, multiprocessing
-from connection import Connection
-from message import Message
+#from datetime import datetime
+#from game import Lotto, OzLotto, PowerBall, USPowerBall, MegaMillions
+#import pickle, os, multiprocessing
+#from connection import Connection
+#from message import Message
 from mplogger import *
 from time import sleep
 
@@ -39,43 +39,38 @@ if __name__ == '__main__':
     host = args.server[0]
     port = args.port[0]
 
-    if os.path.isfile('cruncher.dat'):
-        with open('cruncher.dat','rb') as f:
-            while True:
-                try:
-                    workQ.put(pickle.load(f))
-                except (EOFError, pickle.UnpicklingError):
-                    break
-        os.remove('cruncher.dat')
 
     startTime = datetime.now()
-    wf = Workforce(workQ, host, port, config)
-    c = Connection(config)
-    #c.connect(host, port)
-    #for i in range(wf.crunchers):
-    #    c.send(Message('GET_BLOCK'))
-    #    workQ.put(c.recv())
-    #c.close()
-    elapsed = 0
-    try:
-        while True:
-            #logger.debug('Work que has {} items'.format(workQ.qsize()))
-            if workQ.qsize() < wf.crunchers:
-                logger.debug('Adding {} items to work que'.format(wf.crunchers-workQ.qsize()))
-                c.connect(host, port)
-                for i in range(wf.crunchers-workQ.qsize()):
-                    c.send(Message('GET_BLOCK'))
-                    workQ.put(c.recv())
-                c.close()
+    wf = Workforce(host, port, config)
+    while True:
+        try:
+            wf.fillQueue()
             sleep(1)
-                
-    except KeyboardInterrupt:
-        # Dump the queue to file
-        wf.halt()
-        with open('cruncher.dat', 'wb') as f:
-            while not workQ.empty():
-                pickle.dump(workQ.get(), f)
-        wf.stop()
+        except ConnectionRefusedError:
+            # Host is up but no server found
+            print('No server found on host {}:{}. Check settings and try again.'.format(host, port))
+            if not wf.workAvailable:
+                print('No work available. Exiting.')
+                wf.abort()
+                break
+            else:
+                sleep(29)
+        except TimeoutError:
+            # Host is up but no server found
+            print('Connection timed out connecting to host {}:{}. Check settings and try again.'.format(host, port))
+            if not wf.workAvailable:
+                print('No work available. Exiting.')
+                wf.abort()
+                break
+            else:
+                sleep(29)
+        except (KeyboardInterrupt, SystemExit):
+            print('Waiting for crunchers to complete current work...')
+            # Dump the queue to file
+            wf.halt()
+            wf.stop()
+            break
+
     listener.stop()
     
 def calc():

@@ -1,14 +1,16 @@
-import multiprocessing, psutil, signal
+import multiprocessing, psutil, signal, os, pickle
 from threading import Thread
 #from vector import vector
 from datetime import datetime
 from itertools import combinations
 from message import Message
-import traceback, sys
+#import traceback, sys
 from game import *
 from connection import Connection
 from mplogger import *
 from time import sleep
+
+QUEUE_SIZE_MULTIPLIER = 5
 
 class PipeWatcher(Thread):
 
@@ -37,28 +39,39 @@ class PipeWatcher(Thread):
                 return
             except:
                 print('*** Exception caught in Pipe thread {} ***'.format(self.name))
-                traceback.print_exception(*sys.exc_info())
+                #traceback.print_exception(*sys.exc_info())
                 continue
 
     # Public method to allow the parent to send messages to the pipe
     def send(self, m):
         self.__pipe.send(m)
 
+
 class Workforce():
-    def __init__(self, inQ, host, port, config):
+    def __init__(self, host, port, config):
         self.games = {}
         self.workers = []
         self.pipes = []
-        self.host = host
-        self.port = port
-        self.con = Connection(config)
+        self.con = Connection(config = config, host = host, port = port)
         logging.config.dictConfig(config)
         self.connectionBusy = False
+        self.stopQueue = False
         self.logger = logging.getLogger('workforce')
+        self.workQ = multiprocessing.Queue()
+        
+        if os.path.isfile('cruncher.dat'):
+            with open('cruncher.dat','rb') as f:
+                while True:
+                    try:
+                        self.workQ.put(pickle.load(f))
+                    except (EOFError):
+                        os.remove('cruncher.dat')
+                        break
+
         
         for i in range(self.crunchers):
             r, s = multiprocessing.Pipe()
-            self.workers.append(Cruncher(i, inQ, s, config))
+            self.workers.append(Cruncher(i, self.workQ, s, config))
             self.workers[i].start()
             self.pipes.append(PipeWatcher(self, r, 'Hub{}'.format(i)))
             self.pipes[i].start()
@@ -70,17 +83,27 @@ class Workforce():
         while self.connectionBusy:
             sleep(0.1)
         self.connectionBusy = True
-        self.con.connect(self.host, self.port)
-        self.con.send(Message('RESULT', **m))
-        self.con.close()
+        try:
+            message = Message('RESULT', **m)
+            self.con.send(message)
+            self.con.close()
+        except:
+            with open('messages.dat','ab') as f:
+                pickle.dump(message, f)
         self.connectionBusy = False
 
     def COMPLETE(self, m):
         while self.connectionBusy:
             sleep(0.1)
         self.connectionBusy = True
-        self.con.connect(self.host, self.port)
-        self.con.send(Message('COMPLETE', **m))
+        self.logger.info('=========>>>{}'.format(m['BLOCK']))
+        message = Message('COMPLETE', **m)
+        try:
+            self.con.send(message)
+        except:
+            with open('messages.dat','ab') as f:
+                pickle.dump(message, f)
+            self.logger.info('=========^^^{}'.format(m['BLOCK']))
         self.con.close()
         self.connectionBusy = False
     
@@ -89,7 +112,7 @@ class Workforce():
             sleep(0.1)
         if m['GAMEID'] not in self.games:
             self.connectionBusy = True
-            self.con.connect(self.host, self.port)
+            #self.con.connect(self.host, self.port)
             self.con.send(Message('GET_DATA', GAMEID = m['GAMEID']))
             self.games[m['GAMEID']] = self.con.recv().params['GAME']
             self.con.close()
@@ -100,18 +123,71 @@ class Workforce():
         self.pipes[m['PROC_ID']].send(Message('GAME_DATA', GAME = self.games[m['GAMEID']]))
     
     def halt(self):
-        print('Telling worker processes to HALT')
+        self.stopQueue = True
         for p in self.pipes:
             p.send(Message('HALT'))
+        if self.workQ.qsize() > 0:
+            with open('cruncher.dat', 'wb') as f:
+                while not self.workQ.empty():
+                    pickle.dump(self.workQ.get(), f)
     
     def stop(self):
         for w in self.workers:
             w.join()
     
+    def abort(self):
+        for i in range(self.crunchers):
+            self.workQ.put(None)
+    
     @property
     def crunchers(self):
         return multiprocessing.cpu_count()
-
+    
+    @property
+    def workQueueLimit(self):
+        return self.crunchers * QUEUE_SIZE_MULTIPLIER
+    
+    @property
+    def workAvailable(self):
+        if self.workQ.qsize() > 0:
+            return True
+        return False
+    
+    def fillQueue(self):
+        if not self.stopQueue:
+            success = False
+            if self.workQ.qsize() < self.workQueueLimit:
+                for i in range(self.workQueueLimit - self.workQ.qsize()):
+                    try:
+                        self.con.send(Message('GET_BLOCK'))
+                        b = self.con.recv()
+                        self.logger.info('<<<========={}'.format(b.params['BLOCK']))
+                        self.workQ.put(b)
+                        success = True
+                    except (ConnectionResetError, ConnectionRefusedError, TimeoutError, OSError):
+                        self.logger.info('Server currently unavailable. No new blocks added')
+                        success = False
+                        break
+                    except(pickle.UnpicklingError, KeyError):
+                        # Disregard corruptes messages
+                        continue
+                self.con.close()
+                if success:
+                    success = False
+                    if os.path.isfile('messages.dat'):
+                        with open('messages.dat','rb') as f:
+                            while True:
+                                try:
+                                    self.con.send(pickle.load(f))
+                                except (EOFError):
+                                    success = True
+                                    break
+                        if success:
+                            os.remove('messages.dat')
+                            
+                            
+    
+        
 
 class Cruncher(multiprocessing.Process):
     def __init__(self, proc_id, jobQ, p, config):
@@ -142,7 +218,8 @@ class Cruncher(multiprocessing.Process):
             c = 0
             t = datetime.now()
             block = self.jobQ.get()
-            #print(block)
+            if block is None:
+                return None
             prefix = block.params['BLOCK']
             self.pick = block.params['PICK']
             blockSize = self.pick - len(prefix)
@@ -153,8 +230,6 @@ class Cruncher(multiprocessing.Process):
                 self.wait.clear()
             self.best = block.params['BEST']
             self.most = block.params['MOST']
-            if prefix is None:
-                return None
             self.logger.debug('Starting block {}'.format(prefix))
             for i in combinations(range(max(list(prefix))+1,self.game.poolSize+1),blockSize):
                 numbers = set(prefix + i)
@@ -183,7 +258,6 @@ class Cruncher(multiprocessing.Process):
                     self.most = m['RESULT']
     
     def HALT(self, m):
-        print('Process {} received HALT command.'.format(self.id))
         self.__running = False
     
     def GAME_DATA(self, m):

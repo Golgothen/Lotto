@@ -19,10 +19,10 @@ sender_config = {
             'level':       'INFO',
         },
         'workforce': {
-            'level':       'DEBUG',
+            'level':       'INFO',
         },
         'cruncher': {
-            'level':       'DEBUG',
+            'level':       'INFO',
         },
     },
     'root': {
