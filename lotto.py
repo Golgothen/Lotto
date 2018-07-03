@@ -46,18 +46,9 @@ if __name__ == '__main__':
         try:
             wf.fillQueue()
             sleep(1)
-        except ConnectionRefusedError:
+        except (ConnectionRefusedError, OSError, TimeoutError, ConnectionResetError):
             # Host is up but no server found
             print('No server found on host {}:{}. Check settings and try again.'.format(host, port))
-            if not wf.workAvailable:
-                print('No work available. Exiting.')
-                wf.abort()
-                break
-            else:
-                sleep(29)
-        except TimeoutError:
-            # Host is up but no server found
-            print('Connection timed out connecting to host {}:{}. Check settings and try again.'.format(host, port))
             if not wf.workAvailable:
                 print('No work available. Exiting.')
                 wf.abort()

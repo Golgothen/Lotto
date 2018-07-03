@@ -1,7 +1,7 @@
 import multiprocessing, psutil, signal, os, pickle
 from threading import Thread
 #from vector import vector
-from datetime import datetime
+#from datetime import datetime
 from itertools import combinations
 from message import Message
 #import traceback, sys
@@ -14,7 +14,7 @@ QUEUE_SIZE_MULTIPLIER = 5
 
 class PipeWatcher(Thread):
 
-    def __init__(self, parent, pipe, name):
+    def __init__(self, config, parent, pipe, name):
         super(PipeWatcher, self).__init__()
 
         self.__pipe = pipe
@@ -22,13 +22,17 @@ class PipeWatcher(Thread):
         self.__running = False
         self.name = name
         self.daemon = True
+        self.config = config
 
     def run(self):
+        logging.config.dictConfig(self.config)
+        self.logger = logging.getLogger('pipewatcher')
         self.__running = True
         while self.__running:
             try:
                 while self.__pipe.poll(None):  # Block indefinately waiting for a message
                     m = self.__pipe.recv()
+                    self.logger.debug(m)
                     response = getattr(self.__parent, m.message)(m.params)
                     if response is not None:
                         self.send(response)
@@ -38,7 +42,7 @@ class PipeWatcher(Thread):
             except BrokenPipeError:
                 return
             except:
-                print('*** Exception caught in Pipe thread {} ***'.format(self.name))
+                self.logger.error('Exception caught in Pipe thread {}'.format(self.name), exc_info = True)#, stack_info = True)
                 #traceback.print_exception(*sys.exc_info())
                 continue
 
@@ -53,27 +57,29 @@ class Workforce():
         self.workers = []
         self.pipes = []
         self.con = Connection(config = config, host = host, port = port)
-        logging.config.dictConfig(config)
         self.connectionBusy = False
         self.stopQueue = False
+        logging.config.dictConfig(config)
         self.logger = logging.getLogger('workforce')
         self.workQ = multiprocessing.Queue()
-        
+        success = False
         if os.path.isfile('cruncher.dat'):
             with open('cruncher.dat','rb') as f:
+                self.games = pickle.load(f)
                 while True:
                     try:
                         self.workQ.put(pickle.load(f))
                     except (EOFError):
-                        os.remove('cruncher.dat')
+                        success = True
                         break
+        if success:
+            os.remove('cruncher.dat')
 
-        
         for i in range(self.crunchers):
             r, s = multiprocessing.Pipe()
             self.workers.append(Cruncher(i, self.workQ, s, config))
             self.workers[i].start()
-            self.pipes.append(PipeWatcher(self, r, 'Hub{}'.format(i)))
+            self.pipes.append(PipeWatcher(config, self, r, 'Hub{}'.format(i)))
             self.pipes[i].start()
             
     def RESULT(self, m):
@@ -128,6 +134,7 @@ class Workforce():
             p.send(Message('HALT'))
         if self.workQ.qsize() > 0:
             with open('cruncher.dat', 'wb') as f:
+                pickle.dump(self.games, f)
                 while not self.workQ.empty():
                     pickle.dump(self.workQ.get(), f)
     
@@ -149,6 +156,7 @@ class Workforce():
     
     @property
     def workAvailable(self):
+        self.logger.info(self.workQ.qsize())
         if self.workQ.qsize() > 0:
             return True
         return False
@@ -165,11 +173,9 @@ class Workforce():
                         self.workQ.put(b)
                         success = True
                     except (ConnectionResetError, ConnectionRefusedError, TimeoutError, OSError):
-                        self.logger.info('Server currently unavailable. No new blocks added')
-                        success = False
-                        break
+                        raise
                     except(pickle.UnpicklingError, KeyError):
-                        # Disregard corruptes messages
+                        # Disregard corrupted messages
                         continue
                 self.con.close()
                 if success:
@@ -209,7 +215,7 @@ class Cruncher(multiprocessing.Process):
         logging.config.dictConfig(self.config)
         self.logger = logging.getLogger('cruncher')
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        self.pipe = PipeWatcher(self, self.p, 'Pipe{}'.format(self.id))
+        self.pipe = PipeWatcher(self.config, self, self.p, 'Pipe{}'.format(self.id))
         self.pipe.start()
         p = psutil.Process()
         p.nice(psutil.IDLE_PRIORITY_CLASS)
