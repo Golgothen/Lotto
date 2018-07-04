@@ -167,6 +167,9 @@ class Workforce():
             if self.workQ.qsize() < self.workQueueLimit:
                 for i in range(self.workQueueLimit - self.workQ.qsize()):
                     try:
+                        if self.connectionBusy:
+                            sleep(0.1)
+                        self.connectionBusy = True
                         self.con.send(Message('GET_BLOCK'))
                         try:
                             b = self.con.recv()
@@ -180,6 +183,7 @@ class Workforce():
                     except(pickle.UnpicklingError, KeyError):
                         # Disregard corrupted messages
                         continue
+                self.connectionBusy = False
                 self.con.close()
                 if success:
                     success = False
@@ -255,7 +259,7 @@ class Cruncher(multiprocessing.Process):
             e = datetime.now() - t
             s = e.seconds + (e.microseconds / 1000000)
             self.pipe.send(Message('COMPLETE', PROC_ID = self.id, GAMEID = self.gameID, PICK = self.pick, BLOCK = prefix, ELAPSED = s, COMBINATIONS = c))
-        print('Process {} finished.'.format(self.id))
+        print('Cruncher {} finished.'.format(self.id))
         
     def RESULT(self, m):
         if m['GAMEID'] == self.gameID and m['PICK'] == self.pick:
