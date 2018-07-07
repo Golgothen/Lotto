@@ -10,7 +10,7 @@ from connection import Connection
 from mplogger import *
 from time import sleep
 
-QUEUE_SIZE_MULTIPLIER = 5
+QUEUE_SIZE_MULTIPLIER = 1
 
 class PipeWatcher(Thread):
 
@@ -178,6 +178,7 @@ class Workforce():
                         self.logger.info('<<<========={}'.format(b.params['BLOCK']))
                         self.workQ.put(b)
                         success = True
+                        self.con.close()
                     except (ConnectionResetError, ConnectionRefusedError, TimeoutError, OSError):
                         raise
                     except(pickle.UnpicklingError, KeyError):
