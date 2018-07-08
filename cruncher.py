@@ -193,6 +193,7 @@ class Workforce():
                             while True:
                                 try:
                                     self.con.send(pickle.load(f))
+                                    self.con.close()
                                 except (EOFError):
                                     success = True
                                     break
