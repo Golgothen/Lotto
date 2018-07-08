@@ -10,7 +10,7 @@ from connection import Connection
 from mplogger import *
 from time import sleep
 
-QUEUE_SIZE_MULTIPLIER = 1
+QUEUE_SIZE_MULTIPLIER = 2
 
 class PipeWatcher(Thread):
 
@@ -101,16 +101,17 @@ class Workforce():
     def COMPLETE(self, m):
         while self.connectionBusy:
             sleep(0.1)
-        self.connectionBusy = True
         self.logger.info('=========>>>{}'.format(m['BLOCK']))
         message = Message('COMPLETE', **m)
+        self.connectionBusy = True
         try:
             self.con.send(message)
+            self.con.close()
         except:
+            self.logger.error('Exception in COMPLETE', exc_info = True)
             with open('messages.dat','ab') as f:
                 pickle.dump(message, f)
             self.logger.info('=========^^^{}'.format(m['BLOCK']))
-        self.con.close()
         self.connectionBusy = False
     
     def GETGAME(self, m):
@@ -122,8 +123,8 @@ class Workforce():
             self.con.send(Message('GET_DATA', GAMEID = m['GAMEID']))
             self.games[m['GAMEID']] = self.con.recv().params['GAME']
             self.con.close()
-            self.logger.debug('Loaded new game data for {}'.format(m['GAMEID']))
             self.connectionBusy = False
+            self.logger.debug('Loaded new game data for {}'.format(m['GAMEID']))
         else:
             self.logger.debug('Loaded game data from cache')
         self.pipes[m['PROC_ID']].send(Message('GAME_DATA', GAME = self.games[m['GAMEID']]))
@@ -192,8 +193,12 @@ class Workforce():
                         with open('messages.dat','rb') as f:
                             while True:
                                 try:
+                                    if self.connectionBusy:
+                                        sleep(0.1)
+                                    self.connectionBusy = True
                                     self.con.send(pickle.load(f))
                                     self.con.close()
+                                    self.connectionBusy = False
                                 except (EOFError):
                                     success = True
                                     break

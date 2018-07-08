@@ -79,6 +79,7 @@ class Connection():
         try:
             data = self.socket.recv(SIZE_HEADER)
         except:
+            self.close()
             raise
         messageSize = int.from_bytes(data, byteorder = BYTE_ORDER)
         if messageSize == 0:
