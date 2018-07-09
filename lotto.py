@@ -55,12 +55,17 @@ if __name__ == '__main__':
                 break
         except (ConnectionRefusedError, OSError, TimeoutError, ConnectionResetError):
             # Host is up but no server found
-            logging.error('FillQueue raised exception:', exc_info = True)
-            print('No server found on host {}:{}. Check settings and try again.'.format(host, port))
+            #logging.error('FillQueue raised exception:', exc_info = True)
+            print('No server found on host {}:{}.'.format(host, port))
             if not wf.workAvailable:
-                print('No work available. Exiting.')
-                wf.abort()
-                break
+                print('No work available. Waiting 10 seconds before retrying.')
+                try:
+                    sleep(10)
+                except (KeyboardInterrupt, SystemExit):
+                    print('Exiting')
+                    # Dump the queue to file
+                    wf.abort()
+                    break
             else:
                 try:
                     sleep(29)

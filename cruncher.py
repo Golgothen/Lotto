@@ -10,7 +10,7 @@ from connection import Connection
 from mplogger import *
 from time import sleep
 
-QUEUE_SIZE_MULTIPLIER = 2
+QUEUE_SIZE_MULTIPLIER = 10
 
 class PipeWatcher(Thread):
 
