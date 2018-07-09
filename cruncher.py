@@ -108,7 +108,7 @@ class Workforce():
             self.con.send(message)
             self.con.close()
         except:
-            self.logger.error('Exception in COMPLETE', exc_info = True)
+            #self.logger.error('Exception in COMPLETE', exc_info = True)
             with open('messages.dat','ab') as f:
                 pickle.dump(message, f)
             self.logger.info('=========^^^{}'.format(m['BLOCK']))
@@ -157,7 +157,7 @@ class Workforce():
     
     @property
     def workAvailable(self):
-        self.logger.info(self.workQ.qsize())
+        #self.logger.info(self.workQ.qsize())
         if self.workQ.qsize() > 0:
             return True
         return False
