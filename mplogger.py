@@ -83,6 +83,7 @@ class LogListener(Process):
         self.__stop_event = Event()
         self.name = 'listener'
         self.logQueue = logQueue
+        self.daemon = True
 
     def run(self):
         logging.config.dictConfig(listener_config)
