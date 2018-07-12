@@ -179,8 +179,9 @@ class Workforce():
                         self.logger.info('<<<========={}'.format(b.params['BLOCK']))
                         self.workQ.put(b)
                         success = True
-                        self.con.close()
+                        #self.con.close()
                     except (ConnectionResetError, ConnectionRefusedError, TimeoutError, OSError):
+                        self.con.close()
                         raise
                     except(pickle.UnpicklingError, KeyError):
                         # Disregard corrupted messages
@@ -197,9 +198,10 @@ class Workforce():
                                         sleep(0.1)
                                     self.connectionBusy = True
                                     self.con.send(pickle.load(f))
-                                    self.con.close()
+                                    #self.con.close()
                                     self.connectionBusy = False
                                 except (EOFError):
+                                    self.con.close()
                                     success = True
                                     break
                         if success:
