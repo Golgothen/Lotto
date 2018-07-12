@@ -52,10 +52,13 @@ class PipeWatcher(Thread):
 
 
 class Workforce():
-    def __init__(self, host, port, config):
+    def __init__(self, host, port, config, procs):
         self.games = {}
         self.workers = []
         self.pipes = []
+        self.procs = procs
+        if self.procs == 0:
+            self.procs = multiprocessing.cpu_count()
         self.con = Connection(config = config, host = host, port = port)
         self.connectionBusy = False
         self.stopQueue = False
@@ -74,7 +77,10 @@ class Workforce():
                         break
         if success:
             os.remove('cruncher.dat')
-
+        
+        if self.procs == 0:
+            self.procs = multiprocessing.cpu_count()
+        
         for i in range(self.crunchers):
             r, s = multiprocessing.Pipe()
             self.workers.append(Cruncher(i, self.workQ, s, config))
@@ -149,7 +155,7 @@ class Workforce():
     
     @property
     def crunchers(self):
-        return multiprocessing.cpu_count()
+        return self.procs
     
     @property
     def workQueueLimit(self):

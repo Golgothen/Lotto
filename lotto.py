@@ -28,7 +28,7 @@ if __name__ == '__main__':
     
 
     ap = argparse.ArgumentParser()
-    ap.add_argument('--block', nargs = 1, type= int, default = [3], help = 'Size of the combination block.  Default is 3.  Larger blocks have exponentially more combinations')
+    ap.add_argument('--processes', nargs = 1, type= int, default = [0], help = 'Number of processes to run.  Default = 0 = system CPUs')
     ap.add_argument('--server', nargs = 1, default = ['localhost'], help = 'Specify a block server to get work from (IP address or resolvable host name)')
     ap.add_argument('--port', nargs = 1, type = int, default = [2345], help = 'Specify a port to connect on (default = 2345)')
     
@@ -38,15 +38,15 @@ if __name__ == '__main__':
     #resultQ = multiprocessing.Queue()
     host = args.server[0]
     port = args.port[0]
-
+    procs = args.processes[0]
 
     startTime = datetime.now()
-    wf = Workforce(host, port, config)
+    wf = Workforce(host, port, config, procs)
     while True:
         try:
             wf.fillQueue()
             try:
-                sleep(1)
+                sleep(0.1)
             except (KeyboardInterrupt, SystemExit):
                 print('Waiting for crunchers to complete current work...')
                 # Dump the queue to file
